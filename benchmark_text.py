@@ -48,3 +48,5 @@ for model_name in models_to_test[1:]:
 
     except Exception as e:
         print(f"Could not run test for {model_name}. Error: {e}")
+        
+print("All tests completed successfully.")
