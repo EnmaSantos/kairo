@@ -1,0 +1,74 @@
+# Python
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+__pycache__/
+*.pyc
+
+# Virtual Environments
+kairo-env/
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Model files (uncomment if you don't want to track large model files)
+# *.pt
+# *.pth
+# *.bin
+# *.onnx
+# *.pb
+
+# Data files (uncomment if you don't want to track data)
+# *.csv
+# *.json
+# *.parquet
+# *.pkl
+# *.pickle
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment variables
+.env
+.env.local
+
+# Cache directories
+.cache/
+*.cache
+
