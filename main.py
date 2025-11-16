@@ -38,7 +38,20 @@ transcriber = pipeline(
 )
 
 load_time = time.time() - start_load
-print(f"--- Model loaded successfully in {load_time:.2f} seconds. ---")
+print(f"--- Whisper model loaded successfully in {load_time:.2f} seconds. ---")
+
+# --- NEW: Load Sentiment Analysis Model ---
+print("Loading Sentiment Analysis model...")
+start_sentiment = time.time()
+
+sentiment_analyzer = pipeline(
+    'sentiment-analysis',
+    model='distilbert-base-uncased-finetuned-sst-2-english',
+    device='mps'
+)
+
+sentiment_time = time.time() - start_sentiment
+print(f"--- Sentiment model loaded successfully in {sentiment_time:.2f} seconds. ---")
 
 def get_db():
     db = SessionLocal()
@@ -157,20 +170,25 @@ def create_journal_entry(
     Creates a new journal entry for the currently logged-in user.
     """
     
-    # 1. Create the new entry object
+    # 1. Run sentiment analysis on the text
+    sentiment_result = sentiment_analyzer(entry.text_content)[0]
+    sentiment_label = sentiment_result['label']  # 'POSITIVE' or 'NEGATIVE'
+    
+    # 2. Create the new entry object
     # We get the text from the request (entry.text_content)
     # We get the user's ID from our "get_current_user" dependency (current_user.id)
     new_entry = models.JournalEntry(
         text_content=entry.text_content,
-        user_id=current_user.id 
+        user_id=current_user.id,
+        sentiment=sentiment_label  # Add the sentiment!
     )
     
-    # 2. Add to database and commit
+    # 3. Add to database and commit
     db.add(new_entry)
     db.commit()
     db.refresh(new_entry) # Get the new data back from the DB (like the ID)
     
-    # 3. Return the new entry
+    # 4. Return the new entry (now with sentiment!)
     return new_entry
 
 # --- NEW: GET ALL JOURNAL ENTRIES ENDPOINT ---

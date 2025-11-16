@@ -1,25 +1,22 @@
 import './App.css';
 import NeoButton from './components/NeoButton';
-import { useState } from 'react'; // Import useState to hold our form data
-import axios from 'axios';       // Import axios to make API calls
+import { useState, useEffect } from 'react'; // Import useState AND useEffect
+import axios from 'axios';
 
 // Your backend API is running on port 8000
 const API_URL = 'http://127.0.0.1:8000';
 
 function App() {
   // --- State Variables ---
-  // Store the email and password from the form
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Store the login token we get back from the server
   const [token, setToken] = useState(null);
-  
-  // Store any error messages
   const [error, setError] = useState('');
-  
-  // Store the list of entries
   const [entries, setEntries] = useState([]);
+  
+  // --- NEW State for creating an entry ---
+  const [newEntryText, setNewEntryText] = useState('');
+  const [isPosting, setIsPosting] = useState(false); // Prevents double-clicks
 
   // --- Functions ---
   const handleLogin = async (e) => {
@@ -56,16 +53,11 @@ function App() {
   };
 
   const handleGetEntries = async () => {
-    if (!token) {
-      setError('You must be logged in to see entries.');
-      return;
-    }
+    if (!token) return; // Don't run if we don't have a token
     
     try {
       const response = await axios.get(`${API_URL}/journal-entries`, {
-        headers: {
-          'Authorization': `Bearer ${token}` // Send our token for auth
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       console.log('Entries fetched!', response.data);
@@ -76,6 +68,54 @@ function App() {
       setError('Could not fetch entries.');
     }
   };
+
+  // --- NEW: Function to create a new entry ---
+  const handleCreateEntry = async (e) => {
+    e.preventDefault();
+    if (!token || isPosting || !newEntryText.trim()) return;
+
+    setIsPosting(true);
+    setError('');
+
+    try {
+      // Send the new entry text to the backend
+      const response = await axios.post(`${API_URL}/journal-entries`, 
+        {
+          text_content: newEntryText // Send as JSON
+        }, 
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      
+      console.log('Entry created!', response.data);
+      
+      // --- This is the magic! ---
+      // We get the new entry back (with sentiment!)
+      // and add it to the *top* of our entries list.
+      setEntries([response.data, ...entries]);
+      setNewEntryText(''); // Clear the textarea
+
+    } catch (err) {
+      console.error('Failed to create entry:', err);
+      setError('Could not create entry.');
+    } finally {
+      setIsPosting(false); // Re-enable the button
+    }
+  };
+
+  // --- NEW: useEffect Hook ---
+  // This will run *once* when the 'token' variable changes.
+  useEffect(() => {
+    if (token) {
+      // If we have a token, fetch the entries right away.
+      handleGetEntries();
+    } else {
+      // If we log out (token is null), clear the entries.
+      setEntries([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]); // The "dependency array" - this hook watches 'token'
 
   // --- Render Logic ---
   
@@ -114,21 +154,45 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Welcome to Kairo</h1>
-        <p>You are logged in!</p>
         
-        <NeoButton text="Get My Entries" color="#FFD600" onClick={handleGetEntries} />
+        {/* --- NEW: Create Entry Form --- */}
+        <form onSubmit={handleCreateEntry} className="entry-form">
+          <textarea
+            className="neo-textarea"
+            placeholder="What's on your mind?"
+            value={newEntryText}
+            onChange={(e) => setNewEntryText(e.target.value)}
+          />
+          <NeoButton 
+            text={isPosting ? "Saving..." : "Save Entry"} 
+            color="#00FF95" 
+            type="submit"
+          />
+        </form>
+        {error && <p className="error-message">{error}</p>}
         
+        {/* --- Divider --- */}
+        <hr className="divider" />
+
         {/* This is where we'll list the entries */}
         <div className="entries-list">
+          {entries.length === 0 && <p>No entries yet. Write one!</p>}
           {entries.map(entry => (
             <div key={entry.id} className="entry-item">
-              <p>{new Date(entry.created_at).toLocaleString()}</p>
+              <p>
+                {new Date(entry.created_at).toLocaleString()}
+                {/* --- TEST FOR STRETCH GOAL --- */}
+                {entry.sentiment && (
+                  <span className={`sentiment ${entry.sentiment}`}>
+                    {entry.sentiment}
+                  </span>
+                )}
+              </p>
               <p>{entry.text_content}</p>
             </div>
           ))}
         </div>
         
-        {/* Add a logout button */}
         <NeoButton text="Log Out" color="#FF4747" onClick={() => setToken(null)} />
       </header>
     </div>
