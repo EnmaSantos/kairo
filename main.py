@@ -45,6 +45,32 @@ def get_db():
     finally:
         db.close()
 
+# --- NEW: "GET CURRENT USER" DEPENDENCY ---
+def get_current_user(token: str = Depends(auth.oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Dependency that verifies a user's token and returns
+    the user object from the database.
+    """
+    
+    # This is the exception we'll raise if the token is bad
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    # Verify the token
+    token_data = auth.verify_access_token(token, credentials_exception)
+    
+    # Get the user from the database using the ID in the token
+    user = db.query(models.User).filter(models.User.id == token_data.id).first()
+    
+    if user is None:
+        raise credentials_exception
+        
+    # Return the full user object
+    return user
+
 # --- API Server Setup ---
 # Create an instance of the FastAPI class
 app = FastAPI()
@@ -88,6 +114,19 @@ def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session =
     
     # 5. Return the token
     return {"access_token": access_token, "token_type": "bearer"}
+
+# --- NEW: PROTECTED ENDPOINT ---
+@app.get("/users/me", response_model=schemas.UserResponse)
+def get_user_me(current_user: models.User = Depends(get_current_user)):
+    """
+    A protected route that returns the information
+    for the currently logged-in user.
+    """
+    # Because of the Depends(get_current_user), this code
+    # will ONLY run if the user provides a valid token.
+    # The 'current_user' variable is the user object
+    # returned from our get_current_user function.
+    return current_user
 
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)

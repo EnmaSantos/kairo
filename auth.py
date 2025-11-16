@@ -3,9 +3,13 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import schemas
+from fastapi.security import OAuth2PasswordBearer
 
 # Load environment variables from .env file
 load_dotenv()
+
+# This tells FastAPI what URL to check for a token
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # --- .env variables ---
 # We MUST add these to our .env file
