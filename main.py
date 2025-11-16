@@ -128,6 +128,33 @@ def get_user_me(current_user: models.User = Depends(get_current_user)):
     # returned from our get_current_user function.
     return current_user
 
+# --- NEW: CREATE JOURNAL ENTRY ENDPOINT ---
+@app.post("/journal-entries", status_code=status.HTTP_201_CREATED, response_model=schemas.JournalEntryResponse)
+def create_journal_entry(
+    entry: schemas.JournalEntryCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Creates a new journal entry for the currently logged-in user.
+    """
+    
+    # 1. Create the new entry object
+    # We get the text from the request (entry.text_content)
+    # We get the user's ID from our "get_current_user" dependency (current_user.id)
+    new_entry = models.JournalEntry(
+        text_content=entry.text_content,
+        user_id=current_user.id 
+    )
+    
+    # 2. Add to database and commit
+    db.add(new_entry)
+    db.commit()
+    db.refresh(new_entry) # Get the new data back from the DB (like the ID)
+    
+    # 3. Return the new entry
+    return new_entry
+
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):

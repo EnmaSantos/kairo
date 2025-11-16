@@ -32,3 +32,20 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     id: Optional[str] = None
+
+# --- Journal Entry Schemas ---
+
+class JournalEntryCreate(BaseModel):
+    """ The shape of data we expect when creating an entry. """
+    text_content: str
+
+class JournalEntryResponse(BaseModel):
+    """ The shape of data we will send back. """
+    id: int
+    text_content: str
+    created_at: datetime
+    user_id: int
+    sentiment: Optional[str] = None  # This is for our stretch goal
+
+    class Config:
+        from_attributes = True
