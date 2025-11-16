@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -10,6 +10,8 @@ import time
 import schemas
 import utils
 import auth
+import numpy as np
+import io
 
 # --- NEW IMPORTS ---
 # Import our new models file and the engine from database.py
@@ -252,6 +254,43 @@ def delete_journal_entry(
     
     # 5. Return the 204 "No Content" response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+# --- NEW: AUDIO TRANSCRIPTION ENDPOINT ---
+@app.post("/transcribe-audio")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Transcribes an audio file using the Whisper AI model.
+    Returns the transcribed text.
+    """
+    try:
+        # 1. Read the audio file
+        audio_bytes = await audio.read()
+        
+        # 2. Load the audio using librosa
+        # We need to convert bytes to a file-like object
+        audio_data, sampling_rate = librosa.load(io.BytesIO(audio_bytes), sr=16000)
+        
+        # 3. Run the transcription
+        print(f"Transcribing audio for user {current_user.email}...")
+        result = transcriber(audio_data)
+        
+        print(f"Transcription complete: {result['text']}")
+        
+        # 4. Return the transcribed text
+        return {
+            "text": result['text'],
+            "success": True
+        }
+    
+    except Exception as e:
+        print(f"Transcription error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to transcribe audio: {str(e)}"
+        )
 
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)

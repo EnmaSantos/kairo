@@ -1,5 +1,6 @@
 import './App.css';
 import NeoButton from './components/NeoButton';
+import VoiceRecorder from './components/VoiceRecorder';
 import { useState, useEffect } from 'react'; // Import useState AND useEffect
 import axios from 'axios';
 
@@ -104,6 +105,12 @@ function App() {
     }
   };
 
+  // --- NEW: Function to handle transcription from voice recorder ---
+  const handleTranscription = (transcribedText) => {
+    // Fill the textarea with the transcribed text
+    setNewEntryText(transcribedText);
+  };
+
   // --- NEW: useEffect Hook ---
   // This will run *once* when the 'token' variable changes.
   useEffect(() => {
@@ -155,11 +162,17 @@ function App() {
       <header className="App-header">
         <h1>Welcome to Kairo</h1>
         
+        {/* --- NEW: Voice Recorder --- */}
+        <VoiceRecorder 
+          onTranscriptionComplete={handleTranscription} 
+          token={token}
+        />
+        
         {/* --- NEW: Create Entry Form --- */}
         <form onSubmit={handleCreateEntry} className="entry-form">
           <textarea
             className="neo-textarea"
-            placeholder="What's on your mind?"
+            placeholder="What's on your mind? (Type or record above)"
             value={newEntryText}
             onChange={(e) => setNewEntryText(e.target.value)}
           />
