@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from transformers import pipeline
 from  database import  engine, SessionLocal
+from typing import List
 import librosa
 import time
 import schemas
@@ -74,6 +76,22 @@ def get_current_user(token: str = Depends(auth.oauth2_scheme), db: Session = Dep
 # --- API Server Setup ---
 # Create an instance of the FastAPI class
 app = FastAPI()
+
+# --- NEW: ADD CORS MIDDLEWARE ---
+# This must be right after app = FastAPI()
+
+origins = [
+    "http://localhost:3000",  # The address of your React app
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+# --------------------------------
 
 @app.get("/")
 def read_root():
@@ -154,6 +172,68 @@ def create_journal_entry(
     
     # 3. Return the new entry
     return new_entry
+
+# --- NEW: GET ALL JOURNAL ENTRIES ENDPOINT ---
+@app.get("/journal-entries", response_model=List[schemas.JournalEntryResponse])
+def get_journal_entries(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Gets all journal entries for the currently logged-in user.
+    """
+    
+    # 1. Query the database
+    # Find all entries where the user_id matches the logged-in user's ID
+    # Order them by creation date, newest first.
+    entries = (
+        db.query(models.JournalEntry)
+        .filter(models.JournalEntry.user_id == current_user.id)
+        .order_by(models.JournalEntry.created_at.desc())
+        .all()
+    )
+    
+    # 2. Return the list of entries
+    return entries
+
+# --- NEW: DELETE A JOURNAL ENTRY ENDPOINT ---
+@app.delete("/journal-entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_journal_entry(
+    entry_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Deletes a specific journal entry by its ID.
+    """
+    
+    # 1. Find the entry we want to delete
+    entry_query = db.query(models.JournalEntry).filter(
+        models.JournalEntry.id == entry_id
+    )
+    
+    entry = entry_query.first()
+    
+    # 2. Check if the entry exists
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Entry with id: {entry_id} not found"
+        )
+        
+    # 3. Check if the logged-in user is the owner
+    if entry.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action"
+        )
+        
+    # 4. If both checks pass, delete the entry
+    entry_query.delete(synchronize_session=False)
+    db.commit()
+    
+    # 5. Return the 204 "No Content" response
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)

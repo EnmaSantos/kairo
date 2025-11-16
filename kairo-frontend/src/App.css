@@ -1,0 +1,98 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #F5F5F5; /* Light gray background for neo-brutalism */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: #000000; /* Black text for neo-brutalism */
+}
+
+.App-header h1 {
+  font-family: 'Arial', sans-serif;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #000000;
+}
+
+.App-header h2 {
+  font-family: 'Arial', sans-serif;
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #000000;
+  font-size: 1.5rem;
+}
+
+.App-header p {
+  font-family: 'Arial', sans-serif;
+  margin-bottom: 30px;
+  color: #333333;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.neo-input {
+  font-family: 'Arial', sans-serif;
+  font-size: 1rem;
+  font-weight: bold;
+  padding: 10px;
+  border: 3px solid #000;
+  border-radius: 8px;
+  box-shadow: 4px 4px 0px 0px #000;
+  outline: none;
+  width: 250px;
+  background-color: #fff;
+  color: #000;
+}
+
+.neo-input:focus {
+  box-shadow: 6px 6px 0px 0px #000;
+}
+
+.error-message {
+  color: #FF4747;
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.entries-list {
+  margin-top: 20px;
+  width: 80%;
+  max-width: 600px;
+}
+
+.entry-item {
+  background-color: #fff;
+  border: 3px solid #000;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  text-align: left;
+  color: #000;
+  box-shadow: 4px 4px 0px 0px #000;
+}
+
+.entry-item p {
+  margin: 0;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.entry-item p:first-child {
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #666;
+}
