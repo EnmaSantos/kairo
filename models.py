@@ -14,6 +14,9 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, nullable=False, index=True)
     email = Column(String, nullable=False, unique=True, index=True)
+    username = Column(String, nullable=False, unique=True, index=True)
+    full_name = Column(String, nullable=True)
+    profile_picture_url = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('now()'))

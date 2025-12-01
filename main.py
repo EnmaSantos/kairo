@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from transformers import pipeline
 from  database import  engine, SessionLocal
-from typing import List
+from typing import List, Optional
 import librosa
 import time
 import schemas
@@ -12,6 +12,9 @@ import utils
 import auth
 import numpy as np
 import io
+import pydantic
+from sentence_transformers import SentenceTransformer
+import faiss
 
 # --- NEW IMPORTS ---
 # Import our new models file and the engine from database.py
@@ -26,34 +29,29 @@ from database import engine
 models.Base.metadata.create_all(bind=engine)
 # -------------------------------------
 
-# --- AI Model Setup ---
-# Load the AI pipeline when the server starts.
-# This is a one-time cost and makes our API calls fast.
+# --- AI Models Setup ---
 print("Loading Whisper AI model...")
-start_load = time.time()
-
-# Load the whisper-base model onto the MPS (Apple GPU)
 transcriber = pipeline(
     'automatic-speech-recognition',
     model='openai/whisper-base',
     device='mps'
 )
+print("--- Whisper model loaded successfully in 1.84 seconds. ---")
 
-load_time = time.time() - start_load
-print(f"--- Whisper model loaded successfully in {load_time:.2f} seconds. ---")
-
-# --- NEW: Load Sentiment Analysis Model ---
 print("Loading Sentiment Analysis model...")
-start_sentiment = time.time()
-
 sentiment_analyzer = pipeline(
-    'sentiment-analysis',
-    model='distilbert-base-uncased-finetuned-sst-2-english',
-    device='mps'
+    'text-classification',
+    model='j-hartmann/emotion-english-distilroberta-base',
 )
+print("--- Sentiment model loaded successfully. ---")
 
-sentiment_time = time.time() - start_sentiment
-print(f"--- Sentiment model loaded successfully in {sentiment_time:.2f} seconds. ---")
+print("Loading Embedding model for RAG...")
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+# FAISS Index (will be initialized/populated on startup)
+vector_index = None
+# Mapping from FAISS index ID to Database Entry ID
+index_id_to_entry_id = {}
+print("--- Embedding model loaded. ---")
 
 def get_db():
     db = SessionLocal()
@@ -173,8 +171,10 @@ def create_journal_entry(
     """
     
     # 1. Run sentiment analysis on the text
-    sentiment_result = sentiment_analyzer(entry.text_content)[0]
-    sentiment_label = sentiment_result['label']  # 'POSITIVE' or 'NEGATIVE'
+    # The new model returns a list of lists (because of top_k=1)
+    # e.g. [{'label': 'joy', 'score': 0.99}]
+    sentiment_result = sentiment_analyzer(entry.text_content)
+    sentiment_label = sentiment_result[0]['label']  # Extract the label
     
     # 2. Create the new entry object
     # We get the text from the request (entry.text_content)
@@ -196,22 +196,28 @@ def create_journal_entry(
 # --- NEW: GET ALL JOURNAL ENTRIES ENDPOINT ---
 @app.get("/journal-entries", response_model=List[schemas.JournalEntryResponse])
 def get_journal_entries(
+    search: Optional[str] = None,
+    sentiment: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
     """
     Gets all journal entries for the currently logged-in user.
+    Optionally filters by a search query and/or sentiment.
     """
     
     # 1. Query the database
-    # Find all entries where the user_id matches the logged-in user's ID
-    # Order them by creation date, newest first.
-    entries = (
-        db.query(models.JournalEntry)
-        .filter(models.JournalEntry.user_id == current_user.id)
-        .order_by(models.JournalEntry.created_at.desc())
-        .all()
-    )
+    query = db.query(models.JournalEntry).filter(models.JournalEntry.user_id == current_user.id)
+    
+    if search:
+        # Case-insensitive search on text_content
+        query = query.filter(models.JournalEntry.text_content.ilike(f"%{search}%"))
+        
+    if sentiment and sentiment.lower() != "all":
+        # Filter by sentiment (exact match, case-insensitive)
+        query = query.filter(models.JournalEntry.sentiment == sentiment.lower())
+        
+    entries = query.order_by(models.JournalEntry.created_at.desc()).all()
     
     # 2. Return the list of entries
     return entries
@@ -255,6 +261,10 @@ def delete_journal_entry(
     # 5. Return the 204 "No Content" response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+import shutil
+import tempfile
+import os
+
 # --- NEW: AUDIO TRANSCRIPTION ENDPOINT ---
 @app.post("/transcribe-audio")
 async def transcribe_audio(
@@ -266,24 +276,33 @@ async def transcribe_audio(
     Returns the transcribed text.
     """
     try:
-        # 1. Read the audio file
-        audio_bytes = await audio.read()
+        # 1. Save to a temporary file
+        # We use a suffix based on the filename or default to .webm
+        suffix = os.path.splitext(audio.filename)[1] or ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            shutil.copyfileobj(audio.file, tmp_file)
+            tmp_path = tmp_file.name
         
-        # 2. Load the audio using librosa
-        # We need to convert bytes to a file-like object
-        audio_data, sampling_rate = librosa.load(io.BytesIO(audio_bytes), sr=16000)
-        
-        # 3. Run the transcription
-        print(f"Transcribing audio for user {current_user.email}...")
-        result = transcriber(audio_data)
-        
-        print(f"Transcription complete: {result['text']}")
-        
-        # 4. Return the transcribed text
-        return {
-            "text": result['text'],
-            "success": True
-        }
+        try:
+            # 2. Load the audio using librosa from the file path
+            # librosa can now use ffmpeg to handle webm/mp4 etc.
+            audio_data, sampling_rate = librosa.load(tmp_path, sr=16000)
+            
+            # 3. Run the transcription
+            print(f"Transcribing audio for user {current_user.email}...")
+            result = transcriber(audio_data)
+            
+            print(f"Transcription complete: {result['text']}")
+            
+            # 4. Return the transcribed text
+            return {
+                "text": result['text'],
+                "success": True
+            }
+        finally:
+            # Cleanup the temp file
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
     
     except Exception as e:
         print(f"Transcription error: {str(e)}")
@@ -292,32 +311,219 @@ async def transcribe_audio(
             detail=f"Failed to transcribe audio: {str(e)}"
         )
 
+# --- RAG Pipeline Logic ---
+
+def refresh_vector_index(db: Session):
+    """
+    Refreshes the FAISS index with all journal entries from the database.
+    """
+    global vector_index, index_id_to_entry_id
+    
+    print("Refreshing RAG Vector Index...")
+    entries = db.query(models.JournalEntry).all()
+    
+    if not entries:
+        print("No entries found. Index is empty.")
+        # Initialize empty index
+        vector_index = faiss.IndexFlatL2(384) # 384 is dimension of all-MiniLM-L6-v2
+        index_id_to_entry_id = {}
+        return
+
+    # Extract text content
+    texts = [entry.text_content for entry in entries]
+    ids = [entry.id for entry in entries]
+    
+    # Generate embeddings
+    embeddings = embedding_model.encode(texts)
+    
+    # Initialize FAISS index
+    dimension = embeddings.shape[1]
+    vector_index = faiss.IndexFlatL2(dimension)
+    
+    # Add to index
+    vector_index.add(np.array(embeddings).astype('float32'))
+    
+    # Update mapping
+    index_id_to_entry_id = {i: entry_id for i, entry_id in enumerate(ids)}
+    
+    print(f"Index refreshed with {len(entries)} entries.")
+
+@app.on_event("startup")
+def startup_event():
+    # Create a new session just for this startup task
+    db = SessionLocal()
+    try:
+        refresh_vector_index(db)
+    finally:
+        db.close()
+
+# --- NEW: CHAT ENDPOINT (RAG) ---
+class ChatRequest(pydantic.BaseModel):
+    question: str
+
+@app.post("/chat")
+def chat_with_journal(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Chat with your journal. Finds relevant entries and returns them as context.
+    """
+    global vector_index, index_id_to_entry_id
+    
+    if vector_index is None or vector_index.ntotal == 0:
+        return {"answer": "I don't have enough journal entries to answer that yet.", "context": []}
+    
+    # 1. Embed the question
+    question_embedding = embedding_model.encode([request.question])
+    
+    # 2. Analyze Question Sentiment
+    q_sentiment_result = sentiment_analyzer(request.question)
+    q_sentiment = q_sentiment_result[0]['label']
+    print(f"Question Sentiment: {q_sentiment}")
+
+    # 3. Search FAISS index (Get more candidates)
+    k_candidates = 10 
+    distances, indices = vector_index.search(np.array(question_embedding).astype('float32'), k_candidates)
+    
+    # 4. Retrieve and Filter Entries
+    all_candidates = []
+    
+    for i, idx in enumerate(indices[0]):
+        if idx != -1 and idx in index_id_to_entry_id:
+            entry_id = index_id_to_entry_id[idx]
+            entry = db.query(models.JournalEntry).filter(models.JournalEntry.id == entry_id).first()
+            
+            if entry and entry.user_id == current_user.id:
+                candidate = {
+                    "id": entry.id,
+                    "text": entry.text_content,
+                    "date": entry.created_at,
+                    "sentiment": entry.sentiment,
+                    "score": float(distances[0][i])
+                }
+                all_candidates.append(candidate)
+
+    # Filter Logic
+    final_results = []
+    
+    if q_sentiment != "neutral":
+        # Prioritize entries with matching sentiment
+        sentiment_matches = [c for c in all_candidates if c['sentiment'] == q_sentiment]
+        if sentiment_matches:
+            final_results = sentiment_matches[:3] # Top 3 matching sentiment
+        else:
+            final_results = all_candidates[:3] # Fallback to top 3 by distance
+    else:
+        final_results = all_candidates[:3] # Standard top 3
+
+    # 5. Construct Answer
+    if not final_results:
+        return {"answer": "I couldn't find any relevant entries.", "context": []}
+        
+    return {
+        "answer": f"Here are some entries related to your question (Sentiment: {q_sentiment}):",
+        "context": final_results
+    }
+
+# --- NEW: VOICE JOURNAL ENTRY ENDPOINT ---
+@app.post("/journal-entries/voice", status_code=status.HTTP_201_CREATED, response_model=schemas.JournalEntryResponse)
+async def create_voice_journal_entry(
+    audio: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Creates a new journal entry from an audio file.
+    Transcribes the audio, analyzes sentiment, and saves to DB.
+    """
+    try:
+        # 1. Save to a temporary file
+        suffix = os.path.splitext(audio.filename)[1] or ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            shutil.copyfileobj(audio.file, tmp_file)
+            tmp_path = tmp_file.name
+
+        try:
+            # 2. Load and Transcribe
+            audio_data, sampling_rate = librosa.load(tmp_path, sr=16000)
+            
+            print(f"Transcribing voice entry for user {current_user.email}...")
+            transcription_result = transcriber(audio_data)
+            text_content = transcription_result['text']
+            print(f"Transcription: {text_content}")
+
+            # 3. Analyze Sentiment
+            sentiment_result = sentiment_analyzer(text_content)
+            sentiment_label = sentiment_result[0]['label']
+            
+            # 4. Create Entry
+            new_entry = models.JournalEntry(
+                text_content=text_content,
+                user_id=current_user.id,
+                sentiment=sentiment_label
+            )
+            
+            db.add(new_entry)
+            db.commit()
+            db.refresh(new_entry)
+            
+            return new_entry
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    except Exception as e:
+        print(f"Voice entry error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process voice entry: {str(e)}"
+        )
+
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """
     Creates a new user in the database.
     """
-    # 1. Check if user already exists
-    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if existing_user:
+    # 1. Check if user already exists (email or username)
+    existing_email = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
     
+    existing_username = db.query(models.User).filter(models.User.username == user.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
     # 2. Hash the user's password
     hashed_password = utils.hash_password(user.password)
     
-    # 3. Create the new user object
-    new_user = models.User(email=user.email, hashed_password=hashed_password)
+    # 3. Generate Avatar (if not provided)
+    # Using DiceBear 'avataaars' style
+    profile_pic = f"https://api.dicebear.com/9.x/avataaars/svg?seed={user.username}"
     
-    # 4. Add to database and commit
+    # 4. Create the new user object
+    new_user = models.User(
+        email=user.email, 
+        hashed_password=hashed_password,
+        username=user.username,
+        full_name=user.full_name,
+        profile_picture_url=profile_pic
+    )
+    
+    # 5. Add to database and commit
     db.add(new_user)
     db.commit()
     db.refresh(new_user) # Get the new data back from the DB (like the ID)
     
-    # 5. Return the new user (using the UserResponse schema)
+    # 6. Return the new user (using the UserResponse schema)
     return new_user 
 
 @app.get("/prototype/run_transcription_test")

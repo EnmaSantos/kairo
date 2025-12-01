@@ -6,15 +6,21 @@ from typing import Optional, List
 
 # This is the shape of data we expect for creating a user
 # We only expect an email and a password.
+# This is the shape of data we expect for creating a user
 class UserCreate(BaseModel):
-    email: EmailStr  # Pydantic validates this is a real email format
+    email: EmailStr
     password: str
+    username: str
+    full_name: Optional[str] = None
 
 # This is the shape of data we will *return* to the user
 # We NEVER want to return the password, even the hash.
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
+    username: str
+    full_name: Optional[str] = None
+    profile_picture_url: Optional[str] = None
     created_at: datetime
 
     # This Pydantic config tells it to read data

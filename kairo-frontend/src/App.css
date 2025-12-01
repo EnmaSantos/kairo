@@ -3,14 +3,16 @@
 }
 
 .App-header {
-  background-color: #F5F5F5; /* Light gray background for neo-brutalism */
+  background-color: #F5F5F5;
+  /* Light gray background for neo-brutalism */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
-  color: #000000; /* Black text for neo-brutalism */
+  color: #000000;
+  /* Black text for neo-brutalism */
 }
 
 .App-header h1 {
@@ -25,7 +27,8 @@
   font-weight: bold;
   margin-bottom: 20px;
   color: #000000;
-  font-size: 1.5rem;
+  font-size: 2rem;
+  /* Increased from 1.5rem */
 }
 
 .App-header p {
@@ -34,37 +37,114 @@
   color: #333333;
 }
 
+.auth-container {
+  background-color: #fff;
+  border: 3px solid #000;
+  border-radius: 12px;
+  box-shadow: 8px 8px 0px 0px #000;
+  padding: 40px;
+  width: 90%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.auth-container h1 {
+  font-size: 4rem;
+  /* Increased from 3rem */
+  margin-bottom: 10px;
+}
+
+.auth-container h2 {
+  font-size: 1.6rem;
+  /* Increased from 1.2rem */
+  color: #666;
+  margin-bottom: 30px;
+  font-weight: normal;
+}
+
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  align-items: center;
-  margin-bottom: 10px;
+  width: 100%;
+  gap: 20px;
+  /* Increased gap */
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 10px;
+  /* Increased gap */
+}
+
+.form-label {
+  font-weight: bold;
+  font-size: 1.4rem;
+  /* Increased from 1.1rem */
+  color: #000;
 }
 
 .neo-input {
   font-family: 'Arial', sans-serif;
-  font-size: 1rem;
+  font-size: 1.4rem;
+  /* Increased from 1.1rem */
   font-weight: bold;
-  padding: 10px;
-  border: 3px solid #000;
-  border-radius: 8px;
-  box-shadow: 4px 4px 0px 0px #000;
+  padding: 14px;
+  /* Increased padding */
+  border: 2px solid #000;
+  /* Slightly thinner border for inputs inside card */
+  border-radius: 6px;
+  box-shadow: none;
+  /* Remove shadow from inputs inside card for cleaner look, or keep it? Let's keep it minimal or remove */
   outline: none;
-  width: 250px;
-  background-color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: #F5F5F5;
+  /* Light gray input bg */
   color: #000;
+  transition: all 0.2s ease;
 }
 
 .neo-input:focus {
-  box-shadow: 6px 6px 0px 0px #000;
+  background-color: #fff;
+  border-color: #00FF95;
+  box-shadow: 0 0 0 2px #000;
 }
 
 .error-message {
   color: #FF4747;
-  font-size: 0.9rem;
+  font-size: 1.3rem;
+  /* Increased from 1rem */
   font-weight: bold;
   margin-top: 10px;
+}
+
+.auth-toggle {
+  margin-top: 25px;
+  font-size: 1.3rem;
+  /* Increased from 1rem */
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #00FF95;
+  /* Green accent */
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  font-size: 1.3rem;
+  /* Increased from 1rem */
+}
+
+.link-button:hover {
+  color: #00CC75;
 }
 
 .entries-list {
@@ -87,11 +167,13 @@
 .entry-item p {
   margin: 0;
   padding: 0;
-  font-size: 1rem;
+  font-size: 1.3rem;
+  /* Increased from 1rem */
 }
 
 .entry-item p:first-child {
-  font-size: 0.8rem;
+  font-size: 1.1rem;
+  /* Increased from 0.8rem */
   font-weight: bold;
   margin-bottom: 5px;
   color: #666;
@@ -107,7 +189,8 @@
 
 .neo-textarea {
   font-family: 'Arial', sans-serif;
-  font-size: 1rem;
+  font-size: 1.3rem;
+  /* Increased from 1rem */
   font-weight: bold;
   padding: 10px;
   border: 3px solid #000;
@@ -129,20 +212,58 @@
   margin: 30px 0;
 }
 
-.entry-item p .sentiment {
-  font-size: 0.7rem;
+/* --- Sentiment Tags --- */
+.sentiment {
+  font-size: 1.1rem;
+  /* Increased from 0.8rem */
   font-weight: bold;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 2px solid #000;
+  padding: 4px 8px;
+  border: 2px solid black;
   margin-left: 10px;
-  color: #000;
+  text-transform: uppercase;
+  box-shadow: 2px 2px 0px 0px #000;
+  background-color: #fff;
+  /* Default fallback */
 }
 
-.entry-item p .sentiment.POSITIVE {
-  background-color: #00FF95; /* Green */
+.sentiment.joy {
+  background-color: #FFD600 !important;
+  /* Yellow */
+  color: black !important;
 }
 
-.entry-item p .sentiment.NEGATIVE {
-  background-color: #FF4747; /* Red */
+.sentiment.sadness {
+  background-color: #4DA6FF !important;
+  /* Blue */
+  color: black !important;
+}
+
+.sentiment.anger {
+  background-color: #FF4747 !important;
+  /* Red */
+  color: white !important;
+}
+
+.sentiment.fear {
+  background-color: #9D4EDD !important;
+  /* Purple */
+  color: white !important;
+}
+
+.sentiment.surprise {
+  background-color: #FF9F1C !important;
+  /* Orange */
+  color: black !important;
+}
+
+.sentiment.disgust {
+  background-color: #70E000 !important;
+  /* Green */
+  color: black !important;
+}
+
+.sentiment.neutral {
+  background-color: #E0E0E0 !important;
+  /* Grey */
+  color: black !important;
 }

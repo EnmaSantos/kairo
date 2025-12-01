@@ -1,76 +1,154 @@
 import './App.css';
 import NeoButton from './components/NeoButton';
 import VoiceRecorder from './components/VoiceRecorder';
-import { useState, useEffect } from 'react'; // Import useState AND useEffect
-import axios from 'axios';
-
-// Your backend API is running on port 8000
-const API_URL = 'http://127.0.0.1:8000';
+import React, { useState, useEffect, useRef } from 'react';
+import anime from 'animejs';
+import api from './api';
 
 function App() {
   // --- State Variables ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState(null);
+  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  // Initialize token from localStorage if available
+  const [token, setToken] = useState(localStorage.getItem('kairo_token'));
   const [error, setError] = useState('');
   const [entries, setEntries] = useState([]);
-  
+  const [isRegistering, setIsRegistering] = useState(false);
+
   // --- NEW State for creating an entry ---
   const [newEntryText, setNewEntryText] = useState('');
-  const [isPosting, setIsPosting] = useState(false); // Prevents double-clicks
+  const [isPosting, setIsPosting] = useState(false);
+
+  // --- NEW State for search ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sentimentFilter, setSentimentFilter] = useState('All');
+
+  // --- NEW State for Chat (RAG) ---
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatAnswer, setChatAnswer] = useState(null);
+  const [isChatting, setIsChatting] = useState(false);
+  const [expandedContextIds, setExpandedContextIds] = useState(new Set());
 
   // --- Functions ---
+  const toggleContextExpansion = (id) => {
+    const newSet = new Set(expandedContextIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setExpandedContextIds(newSet);
+  };
+
   const handleLogin = async (e) => {
-    e.preventDefault(); // Stop the form from refreshing the page
-    setError(''); // Clear any old errors
-    
-    // This is the tricky part:
-    // The backend /login route (OAuth2PasswordRequestForm)
-    // expects 'form-data', NOT JSON.
-    // We create URLSearchParams to send the data in the right format.
-    const loginData = new URLSearchParams();
-    loginData.append('username', email); // It expects 'username', which is our email
-    loginData.append('password', password);
+    e.preventDefault();
+    setError('');
 
     try {
-      const response = await axios.post(`${API_URL}/login`, loginData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-      
-      // If login is successful, save the token
-      console.log('Login successful!', response.data);
-      setToken(response.data.access_token);
-      
-      // Clear the form
+      const data = await api.login(email, password);
+      console.log('Login successful!', data);
+      setToken(data.access_token);
+      localStorage.setItem('kairo_token', data.access_token); // Save to localStorage
       setEmail('');
       setPassword('');
-
     } catch (err) {
       console.error('Login failed:', err);
       setError('Login failed. Please check your email and password.');
     }
   };
 
-  const handleGetEntries = async () => {
-    if (!token) return; // Don't run if we don't have a token
-    
-    try {
-      const response = await axios.get(`${API_URL}/journal-entries`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      console.log('Entries fetched!', response.data);
-      setEntries(response.data);
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
 
+    if (password !== confirmPassword) {
+      setError("Passwords don't match!");
+      return;
+    }
+
+    try {
+      await api.register(email, password, username, fullName);
+      // Auto-login after registration
+      const data = await api.login(email, password);
+      setToken(data.access_token);
+      localStorage.setItem('kairo_token', data.access_token); // Save to localStorage
+      setEmail('');
+      setPassword('');
+      setUsername('');
+      setFullName('');
+      setConfirmPassword('');
     } catch (err) {
-      console.error('Failed to fetch entries:', err);
-      setError('Could not fetch entries.');
+      console.error('Registration failed:', err);
+      setError('Registration failed. Username or Email might be taken.');
     }
   };
 
-  // --- NEW: Function to create a new entry ---
+  const handleGetEntries = async () => {
+    if (!token) return;
+
+    try {
+      // Pass searchQuery and sentimentFilter to the API
+      const data = await api.getEntries(token, searchQuery, sentimentFilter);
+      console.log('Entries fetched!', data);
+      setEntries(data);
+    } catch (err) {
+      console.error('Failed to fetch entries:', err);
+      setError('Could not fetch entries.');
+      // If token is invalid (e.g. expired), clear it
+      if (err.response && err.response.status === 401) {
+        setToken(null);
+        localStorage.removeItem('kairo_token');
+      }
+    }
+  };
+
+  // --- Animation Effect ---
+  useEffect(() => {
+    if (entries.length > 0) {
+      anime({
+        targets: '.entry-item',
+        translateY: [20, 0],
+        opacity: [0, 1],
+        delay: anime.stagger(100), // delay starts at 100ms then increase by 100ms for each element.
+        easing: 'easeOutExpo'
+      });
+    }
+  }, [entries]);
+
+  const handleChat = async (e) => {
+    e.preventDefault();
+    if (!token || !chatQuestion.trim()) return;
+
+    setIsChatting(true);
+    setChatAnswer(null);
+
+    try {
+      const data = await api.chatWithJournal(token, chatQuestion);
+      setChatAnswer(data);
+    } catch (err) {
+      console.error('Chat failed:', err);
+      alert('Failed to chat with journal.');
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  // --- Chat Animation ---
+  useEffect(() => {
+    if (chatAnswer) {
+      anime({
+        targets: '.chat-answer',
+        scale: [0.9, 1],
+        opacity: [0, 1],
+        duration: 600,
+        easing: 'easeOutElastic(1, .8)'
+      });
+    }
+  }, [chatAnswer]);
+
   const handleCreateEntry = async (e) => {
     e.preventDefault();
     if (!token || isPosting || !newEntryText.trim()) return;
@@ -79,96 +157,160 @@ function App() {
     setError('');
 
     try {
-      // Send the new entry text to the backend
-      const response = await axios.post(`${API_URL}/journal-entries`, 
-        {
-          text_content: newEntryText // Send as JSON
-        }, 
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      );
-      
-      console.log('Entry created!', response.data);
-      
-      // --- This is the magic! ---
-      // We get the new entry back (with sentiment!)
-      // and add it to the *top* of our entries list.
-      setEntries([response.data, ...entries]);
-      setNewEntryText(''); // Clear the textarea
-
+      const newEntry = await api.createEntry(token, newEntryText);
+      console.log('Entry created!', newEntry);
+      setEntries([newEntry, ...entries]);
+      setNewEntryText('');
     } catch (err) {
       console.error('Failed to create entry:', err);
       setError('Could not create entry.');
     } finally {
-      setIsPosting(false); // Re-enable the button
+      setIsPosting(false);
     }
   };
 
-  // --- NEW: Function to handle transcription from voice recorder ---
   const handleTranscription = (transcribedText) => {
-    // Fill the textarea with the transcribed text
     setNewEntryText(transcribedText);
   };
 
-  // --- NEW: useEffect Hook ---
-  // This will run *once* when the 'token' variable changes.
+  const handleVoiceSave = (newEntry) => {
+    setEntries([newEntry, ...entries]);
+  };
+
+  // --- useEffect Hook ---
   useEffect(() => {
     if (token) {
-      // If we have a token, fetch the entries right away.
-      handleGetEntries();
+      // Debounce search to avoid too many requests
+      const delayDebounceFn = setTimeout(() => {
+        handleGetEntries();
+      }, 500);
+
+      return () => clearTimeout(delayDebounceFn);
     } else {
-      // If we log out (token is null), clear the entries.
       setEntries([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]); // The "dependency array" - this hook watches 'token'
+  }, [token, searchQuery, sentimentFilter]);
 
   // --- Render Logic ---
-  
-  // If we are NOT logged in (no token), show the login form
+
   if (!token) {
     return (
       <div className="App">
         <header className="App-header">
-          <h1>Kairo</h1>
-          <h2>Please Log In</h2>
-          <form onSubmit={handleLogin} className="login-form">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="neo-input"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="neo-input"
-            />
-            <NeoButton text="Login" color="#00FF95" type="submit" />
-          </form>
-          {error && <p className="error-message">{error}</p>}
+          <div className="auth-container">
+            <h1>Kairo</h1>
+            <h2>{isRegistering ? 'Create your account' : 'Welcome back. Please log in to your account.'}</h2>
+
+            <form onSubmit={isRegistering ? handleRegister : handleLogin} className="login-form">
+
+              {isRegistering && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Full Name</label>
+                    <input
+                      type="text"
+                      placeholder="John Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="neo-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Username</label>
+                    <input
+                      type="text"
+                      placeholder="johndoe123"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="neo-input"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="neo-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input
+                  type="password"
+                  placeholder="........"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="neo-input"
+                />
+              </div>
+
+              {isRegistering && (
+                <div className="form-group">
+                  <label className="form-label">Confirm Password</label>
+                  <input
+                    type="password"
+                    placeholder="........"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="neo-input"
+                  />
+                </div>
+              )}
+
+              {!isRegistering && (
+                <div style={{ width: '100%', textAlign: 'left', marginBottom: '5px' }}>
+                  <a href="/" style={{ color: '#00FF95', fontSize: '0.8rem', fontWeight: 'bold', textDecoration: 'none' }}>Forgot your password?</a>
+                </div>
+              )}
+
+              <NeoButton
+                text={isRegistering ? "Sign Up" : "Log In"}
+                color="#00FF95"
+                type="submit"
+                style={{ width: '100%' }}
+              />
+            </form>
+
+            <p className="auth-toggle">
+              {isRegistering ? "Already have an account? " : "Don't have an account? "}
+              <button
+                className="link-button"
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setError('');
+                }}
+              >
+                {isRegistering ? "Login here" : "Register here"}
+              </button>
+            </p>
+
+            {error && <p className="error-message">{error}</p>}
+          </div>
         </header>
       </div>
     );
   }
 
-  // If we ARE logged in, show the main app
   return (
     <div className="App">
       <header className="App-header">
         <h1>Welcome to Kairo</h1>
-        
-        {/* --- NEW: Voice Recorder --- */}
-        <VoiceRecorder 
-          onTranscriptionComplete={handleTranscription} 
+
+        {/* --- Voice Recorder --- */}
+        <VoiceRecorder
+          onTranscriptionComplete={handleTranscription}
+          onSave={handleVoiceSave}
           token={token}
         />
-        
-        {/* --- NEW: Create Entry Form --- */}
+
+        {/* --- Create Entry Form --- */}
         <form onSubmit={handleCreateEntry} className="entry-form">
           <textarea
             className="neo-textarea"
@@ -176,27 +318,118 @@ function App() {
             value={newEntryText}
             onChange={(e) => setNewEntryText(e.target.value)}
           />
-          <NeoButton 
-            text={isPosting ? "Saving..." : "Save Entry"} 
-            color="#00FF95" 
+          <NeoButton
+            text={isPosting ? "Saving..." : "Save Entry"}
+            color="#00FF95"
             type="submit"
           />
         </form>
         {error && <p className="error-message">{error}</p>}
-        
+
+        {/* --- Search & Filter Bar --- */}
+        <div className="search-bar" style={{ marginBottom: '20px', display: 'flex', gap: '10px', width: '100%', maxWidth: '600px' }}>
+          <input
+            type="text"
+            placeholder="Search entries..."
+            className="neo-input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ flex: 1 }}
+          />
+
+          <select
+            className="neo-input"
+            value={sentimentFilter}
+            onChange={(e) => setSentimentFilter(e.target.value)}
+            style={{ width: '150px', cursor: 'pointer' }}
+          >
+            <option value="All">All Moods</option>
+            <option value="joy">Joy</option>
+            <option value="sadness">Sadness</option>
+            <option value="anger">Anger</option>
+            <option value="fear">Fear</option>
+            <option value="surprise">Surprise</option>
+            <option value="disgust">Disgust</option>
+            <option value="neutral">Neutral</option>
+          </select>
+        </div>
+
+        {/* --- Chat Interface --- */}
+        <div className="chat-interface" style={{ width: '100%', maxWidth: '600px', marginBottom: '30px' }}>
+          <form onSubmit={handleChat} style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="text"
+              placeholder="Ask your journal a question..."
+              className="neo-input"
+              value={chatQuestion}
+              onChange={(e) => setChatQuestion(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <NeoButton
+              text={isChatting ? "..." : "Ask"}
+              color="#9D4EDD"
+              type="submit"
+              style={{ width: '100px' }}
+            />
+          </form>
+
+          {chatAnswer && (
+            <div className="chat-answer" style={{
+              marginTop: '15px',
+              padding: '15px',
+              border: '3px solid #000',
+              borderRadius: '8px',
+              backgroundColor: '#E0E0E0',
+              boxShadow: '4px 4px 0px 0px #000',
+              textAlign: 'left'
+            }}>
+              <p style={{ fontWeight: 'bold', marginBottom: '10px' }}>{chatAnswer.answer}</p>
+              {chatAnswer.context && chatAnswer.context.length > 0 && (
+                <div className="chat-context">
+                  <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '5px' }}>Relevant Entries:</p>
+                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    {chatAnswer.context.map((ctx) => {
+                      const isExpanded = expandedContextIds.has(ctx.id);
+                      return (
+                        <li
+                          key={ctx.id}
+                          style={{ fontSize: '0.9rem', marginBottom: '8px', cursor: 'pointer' }}
+                          onClick={() => toggleContextExpansion(ctx.id)}
+                        >
+                          {isExpanded ? (
+                            <>
+                              <span style={{ fontWeight: 'bold' }}>[Collapse] </span>
+                              "{ctx.text}"
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontWeight: 'bold' }}>[Expand] </span>
+                              "{ctx.text.substring(0, 100)}..."
+                            </>
+                          )}
+                          <span className={`sentiment ${ctx.sentiment} `} style={{ fontSize: '0.7rem', padding: '2px 4px', marginLeft: '5px' }}>{ctx.sentiment}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* --- Divider --- */}
         <hr className="divider" />
 
-        {/* This is where we'll list the entries */}
+        {/* Entries List */}
         <div className="entries-list">
           {entries.length === 0 && <p>No entries yet. Write one!</p>}
           {entries.map(entry => (
             <div key={entry.id} className="entry-item">
               <p>
                 {new Date(entry.created_at).toLocaleString()}
-                {/* --- TEST FOR STRETCH GOAL --- */}
                 {entry.sentiment && (
-                  <span className={`sentiment ${entry.sentiment}`}>
+                  <span className={`sentiment ${entry.sentiment} `}>
                     {entry.sentiment}
                   </span>
                 )}
@@ -205,8 +438,15 @@ function App() {
             </div>
           ))}
         </div>
-        
-        <NeoButton text="Log Out" color="#FF4747" onClick={() => setToken(null)} />
+
+        <NeoButton
+          text="Log Out"
+          color="#FF4747"
+          onClick={() => {
+            setToken(null);
+            localStorage.removeItem('kairo_token'); // Clear from localStorage
+          }}
+        />
       </header>
     </div>
   );

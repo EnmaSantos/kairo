@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import './VoiceRecorder.css';
 import NeoButton from './NeoButton';
+import api from '../api';
 
-const VoiceRecorder = ({ onTranscriptionComplete, token }) => {
+const VoiceRecorder = ({ onTranscriptionComplete, onSave, token }) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -21,14 +22,6 @@ const VoiceRecorder = ({ onTranscriptionComplete, token }) => {
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
-        
-        // Stop all tracks to release the microphone
-        stream.getTracks().forEach(track => track.stop());
-      };
-
       mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
@@ -37,71 +30,94 @@ const VoiceRecorder = ({ onTranscriptionComplete, token }) => {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async (action = 'transcribe') => {
     if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+        // Stop all tracks to release the microphone
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+
+        if (action === 'transcribe') {
+          await handleTranscribe(audioBlob);
+        } else if (action === 'save') {
+          await handleSave(audioBlob);
+        }
+      };
+
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      setIsTranscribing(true);
+      setIsProcessing(true);
     }
   };
 
-  const transcribeAudio = async (audioBlob) => {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-
+  const handleTranscribe = async (audioBlob) => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/transcribe-audio', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Transcription failed');
-      }
-
-      const data = await response.json();
+      const data = await api.transcribeAudio(token, audioBlob);
       console.log('Transcription:', data.text);
-      
-      // Call the callback with the transcribed text
       onTranscriptionComplete(data.text);
-      
     } catch (error) {
       console.error('Transcription error:', error);
-      alert('Failed to transcribe audio. Please try again.');
+      alert('Failed to transcribe audio.');
     } finally {
-      setIsTranscribing(false);
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSave = async (audioBlob) => {
+    try {
+      const newEntry = await api.createVoiceEntry(token, audioBlob);
+      console.log('Voice entry created:', newEntry);
+      if (onSave) onSave(newEntry);
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Failed to save voice entry.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   return (
     <div className="voice-recorder">
-      {!isRecording && !isTranscribing && (
-        <NeoButton 
-          text="🎤 Record Voice Entry" 
-          color="#FF6B9D" 
+      {!isRecording && !isProcessing && (
+        <NeoButton
+          text="🎤 Record Voice"
+          color="#FF6B9D"
           onClick={startRecording}
         />
       )}
-      
+
       {isRecording && (
         <div className="recording-indicator">
           <div className="pulse-dot"></div>
           <span>Recording...</span>
-          <NeoButton 
-            text="⏹ Stop" 
-            color="#FF4747" 
-            onClick={stopRecording}
-          />
+          <div className="recording-controls">
+            <NeoButton
+              text="📝 Transcribe"
+              color="#00FF95"
+              onClick={() => stopRecording('transcribe')}
+            />
+            <NeoButton
+              text="💾 Save Directly"
+              color="#FFD600"
+              onClick={() => stopRecording('save')}
+            />
+            <NeoButton
+              text="❌ Cancel"
+              color="#FF4747"
+              onClick={() => {
+                mediaRecorderRef.current.stop();
+                setIsRecording(false);
+              }}
+            />
+          </div>
         </div>
       )}
-      
-      {isTranscribing && (
+
+      {isProcessing && (
         <div className="transcribing-indicator">
           <div className="spinner"></div>
-          <span>Transcribing...</span>
+          <span>Processing audio...</span>
         </div>
       )}
     </div>
