@@ -34,6 +34,15 @@ def seed_data():
             db.refresh(user)
             print(f"Created user: {email} / {password}")
 
+            print(f"Created user: {email} / {password}")
+
+        # 1.5 Create Notebook
+        notebook = models.Notebook(title="Daily Journal", user_id=user.id)
+        db.add(notebook)
+        db.commit()
+        db.refresh(notebook)
+        print(f"Created notebook: {notebook.title}")
+
         # 2. Create Journal Entries
         # Clear existing entries for this user to avoid duplicates if run multiple times
         db.query(models.JournalEntry).filter(models.JournalEntry.user_id == user.id).delete()
@@ -73,7 +82,8 @@ def seed_data():
                 text_content=data["text"],
                 sentiment=data["sentiment"],
                 user_id=user.id,
-                created_at=created_at
+                created_at=created_at,
+                notebook_id=notebook.id
             )
             db.add(entry)
         

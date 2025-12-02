@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -15,6 +15,11 @@ import io
 import pydantic
 from sentence_transformers import SentenceTransformer
 import faiss
+import warnings
+
+# Suppress librosa/audioread warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
+warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
 
 # --- NEW IMPORTS ---
 # Import our new models file and the engine from database.py
@@ -30,7 +35,6 @@ models.Base.metadata.create_all(bind=engine)
 # -------------------------------------
 
 # --- AI Models Setup ---
-print("Loading Whisper AI model...")
 transcriber = pipeline(
     'automatic-speech-recognition',
     model='openai/whisper-base',
@@ -176,13 +180,14 @@ def create_journal_entry(
     sentiment_result = sentiment_analyzer(entry.text_content)
     sentiment_label = sentiment_result[0]['label']  # Extract the label
     
-    # 2. Create the new entry object
+    # 2. Create the new entry in the database
     # We get the text from the request (entry.text_content)
     # We get the user's ID from our "get_current_user" dependency (current_user.id)
     new_entry = models.JournalEntry(
         text_content=entry.text_content,
         user_id=current_user.id,
-        sentiment=sentiment_label  # Add the sentiment!
+        sentiment=sentiment_label, # Add the sentiment!
+        notebook_id=entry.notebook_id
     )
     
     # 3. Add to database and commit
@@ -198,6 +203,7 @@ def create_journal_entry(
 def get_journal_entries(
     search: Optional[str] = None,
     sentiment: Optional[str] = None,
+    notebook_id: Optional[int] = None,
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
@@ -216,6 +222,9 @@ def get_journal_entries(
     if sentiment and sentiment.lower() != "all":
         # Filter by sentiment (exact match, case-insensitive)
         query = query.filter(models.JournalEntry.sentiment == sentiment.lower())
+
+    if notebook_id is not None:
+        query = query.filter(models.JournalEntry.notebook_id == notebook_id)
         
     entries = query.order_by(models.JournalEntry.created_at.desc()).all()
     
@@ -427,10 +436,32 @@ def chat_with_journal(
         "context": final_results
     }
 
+@app.post("/notebooks", status_code=status.HTTP_201_CREATED, response_model=schemas.NotebookResponse)
+def create_notebook(notebook: schemas.NotebookCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    new_notebook = models.Notebook(title=notebook.title, user_id=current_user.id)
+    db.add(new_notebook)
+    db.commit()
+    db.refresh(new_notebook)
+    return new_notebook
+
+@app.get("/notebooks", response_model=List[schemas.NotebookResponse])
+def get_notebooks(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return db.query(models.Notebook).filter(models.Notebook.user_id == current_user.id).all()
+
+@app.delete("/notebooks/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_notebook(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    notebook_query = db.query(models.Notebook).filter(models.Notebook.id == id, models.Notebook.user_id == current_user.id)
+    if not notebook_query.first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notebook not found")
+    notebook_query.delete(synchronize_session=False)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 # --- NEW: VOICE JOURNAL ENTRY ENDPOINT ---
 @app.post("/journal-entries/voice", status_code=status.HTTP_201_CREATED, response_model=schemas.JournalEntryResponse)
 async def create_voice_journal_entry(
     audio: UploadFile = File(...),
+    notebook_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -462,7 +493,8 @@ async def create_voice_journal_entry(
             new_entry = models.JournalEntry(
                 text_content=text_content,
                 user_id=current_user.id,
-                sentiment=sentiment_label
+                sentiment=sentiment_label,
+                notebook_id=notebook_id
             )
             
             db.add(new_entry)
@@ -470,16 +502,66 @@ async def create_voice_journal_entry(
             db.refresh(new_entry)
             
             return new_entry
+            
         finally:
+            # Clean up temp file
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
     except Exception as e:
-        print(f"Voice entry error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process voice entry: {str(e)}"
-        )
+        import traceback
+        traceback.print_exc()
+        print(f"Error processing voice entry: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- NEW: WEBSOCKET TRANSCRIPTION ENDPOINT ---
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws/transcribe")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("WebSocket connected")
+    
+    try:
+        while True:
+            # Receive audio chunk (bytes)
+            data = await websocket.receive_bytes()
+            
+            # TODO: In a real production app, we would:
+            # 1. Append this chunk to a rolling buffer
+            # 2. Use a streaming-optimized model (like faster-whisper)
+            # 3. Transcribe the buffer
+            
+            # For this MVP/Prototype with standard Whisper:
+            # We will save the chunk to a temp file and transcribe it.
+            # This works best if the frontend sends "sentences" or larger chunks (e.g. every 2-3s).
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
+                tmp_file.write(data)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Load and transcribe
+                # Note: sr=16000 is standard for Whisper
+                audio_data, _ = librosa.load(tmp_path, sr=16000)
+                result = transcriber(audio_data)
+                text = result['text']
+                
+                # Send back the text
+                if text.strip():
+                    await websocket.send_json({"text": text})
+                    
+            except Exception as e:
+                print(f"Error transcribing chunk: {e}")
+                await websocket.send_json({"error": str(e)})
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                    
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
 
 # --- NEW: USER REGISTRATION ENDPOINT ---
 @app.post("/users", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)

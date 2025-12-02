@@ -20,6 +20,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('now()'))
+    
+    notebooks = relationship("Notebook", back_populates="owner")
 
 class JournalEntry(Base):
     """
@@ -37,3 +39,17 @@ class JournalEntry(Base):
     
     # This tells SQLAlchemy how to link this entry back to its owner (the User)
     owner = relationship("User")
+    
+    notebook_id = Column(Integer, ForeignKey("notebooks.id", ondelete="SET NULL"), nullable=True)
+    notebook = relationship("Notebook", back_populates="entries")
+
+class Notebook(Base):
+    __tablename__ = "notebooks"
+    
+    id = Column(Integer, primary_key=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    
+    owner = relationship("User", back_populates="notebooks")
+    entries = relationship("JournalEntry", back_populates="notebook")

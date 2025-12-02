@@ -39,11 +39,25 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     id: Optional[str] = None
 
+# --- Notebook Schemas ---
+class NotebookCreate(BaseModel):
+    title: str
+
+class NotebookResponse(BaseModel):
+    id: int
+    title: str
+    created_at: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
 # --- Journal Entry Schemas ---
 
 class JournalEntryCreate(BaseModel):
     """ The shape of data we expect when creating an entry. """
     text_content: str
+    notebook_id: Optional[int] = None
 
 class JournalEntryResponse(BaseModel):
     """ The shape of data we will send back. """
@@ -52,6 +66,7 @@ class JournalEntryResponse(BaseModel):
     created_at: datetime
     user_id: int
     sentiment: Optional[str] = None  # This is for our stretch goal
+    notebook_id: Optional[int] = None
 
     class Config:
         from_attributes = True
