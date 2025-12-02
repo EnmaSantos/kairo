@@ -37,7 +37,7 @@ models.Base.metadata.create_all(bind=engine)
 # --- AI Models Setup ---
 transcriber = pipeline(
     'automatic-speech-recognition',
-    model='openai/whisper-base',
+    model='distil-whisper/distil-medium.en',
     device='mps'
 )
 print("--- Whisper model loaded successfully in 1.84 seconds. ---")

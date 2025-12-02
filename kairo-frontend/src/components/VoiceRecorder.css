@@ -93,7 +93,7 @@
   text-align: left;
   font-family: 'Courier New', Courier, monospace;
   font-size: 1.1rem;
-  color: #00FF95;
+  color: #fff;
   box-shadow: 4px 4px 0px 0px #000;
   position: relative;
   overflow: hidden;
@@ -101,12 +101,16 @@
   box-sizing: border-box;
 }
 
+.typewriter-text {
+  color: #fff !important;
+}
+
 .typewriter-text::after {
   content: '▋';
   display: inline-block;
   vertical-align: bottom;
   animation: blink 1s step-start infinite;
-  color: #00FF95;
+  color: #fff;
   margin-left: 2px;
 }
 
