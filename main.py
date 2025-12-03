@@ -481,7 +481,7 @@ async def create_voice_journal_entry(
             audio_data, sampling_rate = librosa.load(tmp_path, sr=16000)
             
             print(f"Transcribing voice entry for user {current_user.email}...")
-            transcription_result = transcriber(audio_data)
+            transcription_result = transcriber(audio_data, return_timestamps=True)
             text_content = transcription_result['text']
             print(f"Transcription: {text_content}")
 
