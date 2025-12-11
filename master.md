@@ -1,7 +1,7 @@
 # KAIRO: Project Master Plan & Technical Specification
 
 **Version:** 1.0.0
-**Status:** Active Development (Phase 2)
+**Status:** Feature Complete (Verification Phase)
 **Developer:** Enmanuel De Los Santos Cruz
 
 ---
@@ -80,7 +80,7 @@ Kairo is a "voice-first" intelligent journaling application. It removes the fric
 - [x] **Frontend:** "Create Entry" Textarea form.
 - [x] **Frontend:** "Delete" button logic.
 
-### Phase 3: AI Integration (Basic) (🚧 IN PROGRESS)
+### Phase 3: AI Integration (Basic) (✅ COMPLETED)
 - [x] **Backend:** Load `distilbert` model on startup.
 - [x] **Backend:** Run sentiment analysis on text entry creation.
 - [x] **Frontend:** Display sentiment tag (Color-coded: Green/Red).
@@ -116,7 +116,7 @@ Kairo is a "voice-first" intelligent journaling application. It removes the fric
 ### Entries
 * `GET /journal-entries` - Get all entries for current user.
 * `POST /journal-entries` - Create text-only entry.
-* `POST /journal-entries/voice` - **(Todo)** Upload audio blob for transcription & creation.
+* `POST /journal-entries/voice` - Upload audio blob for transcription & creation.
 * `DELETE /journal-entries/{id}` - Delete an entry.
 
 ### System

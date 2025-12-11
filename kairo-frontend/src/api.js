@@ -15,6 +15,11 @@ const api = {
         return response.data;
     },
 
+    googleLogin: async (token, mode = 'login') => {
+        const response = await axios.post(`${API_URL}/auth/google`, { token, mode });
+        return response.data;
+    },
+
     register: async (email, password, username, fullName) => {
         try {
             const response = await axios.post(`${API_URL}/users`, {
@@ -28,6 +33,32 @@ const api = {
             console.error('Registration error:', error);
             throw error;
         }
+    },
+
+    getUser: async (token) => {
+        const response = await axios.get(`${API_URL}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    updateUser: async (token, userData) => {
+        const response = await axios.put(`${API_URL}/users/me`, userData, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    uploadImage: async (token, file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await axios.post(`${API_URL}/upload`, formData, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return response.data;
     },
 
     // --- Notebooks ---
@@ -58,7 +89,7 @@ const api = {
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (sentiment && sentiment !== 'All') params.append('sentiment', sentiment);
-        if (notebookId) params.append('notebook_id', notebookId);
+        if (notebookId && notebookId !== 'all') params.append('notebook_id', notebookId);
 
         if (Array.from(params).length > 0) {
             url += `?${params.toString()}`;
@@ -70,9 +101,15 @@ const api = {
         return response.data;
     },
 
-    createEntry: async (token, textContent, notebookId = null) => {
+    createEntry: async (token, textContent, notebookId = null, imageUrl = null, latitude = null, longitude = null) => {
         const response = await axios.post(`${API_URL}/journal-entries`,
-            { text_content: textContent, notebook_id: notebookId },
+            {
+                text_content: textContent,
+                notebook_id: notebookId,
+                image_url: imageUrl,
+                latitude: latitude,
+                longitude: longitude
+            },
             { headers: { 'Authorization': `Bearer ${token}` } }
         );
         return response.data;
@@ -118,6 +155,23 @@ const api = {
         const response = await axios.post(`${API_URL}/chat`,
             { question },
             { headers: { Authorization: `Bearer ${token}` } }
+        );
+        return response.data;
+    },
+
+    // --- Automated Notebooks ---
+    autoGenerateNotebook: async (token, startDate, endDate, mode) => {
+        const params = {};
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        if (mode) params.mode = mode;
+
+        const response = await axios.post(`${API_URL}/notebooks/auto-generate`,
+            {}, // Body is empty, using query params
+            {
+                headers: { Authorization: `Bearer ${token}` },
+                params: params
+            }
         );
         return response.data;
     }

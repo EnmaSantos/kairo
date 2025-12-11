@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from transformers import pipeline
 from  database import  engine, SessionLocal
 from typing import List, Optional
@@ -16,6 +16,8 @@ import pydantic
 from sentence_transformers import SentenceTransformer
 import faiss
 import warnings
+from datetime import datetime, timedelta, date
+from sqlalchemy import func
 
 # Suppress librosa/audioread warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
@@ -25,6 +27,12 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
 # Import our new models file and the engine from database.py
 import models
 from database import engine
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 # ---------------------
 
 # --- NEW: CREATE THE DATABASE TABLES ---
@@ -56,6 +64,10 @@ vector_index = None
 # Mapping from FAISS index ID to Database Entry ID
 index_id_to_entry_id = {}
 print("--- Embedding model loaded. ---")
+
+print("Loading Summarization model...")
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+print("--- Summarization model loaded. ---")
 
 def get_db():
     db = SessionLocal()
@@ -108,6 +120,12 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
+
+# --- NEW: MOUNT STATIC FILES ---
+from fastapi.staticfiles import StaticFiles
+# Create the directory if it doesn't exist
+os.makedirs("static/uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # --------------------------------
 
 @app.get("/")
@@ -150,6 +168,78 @@ def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session =
     # 5. Return the token
     return {"access_token": access_token, "token_type": "bearer"}
 
+# --- NEW: GOOGLE AUTH ENDPOINT ---
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+@app.post("/auth/google", response_model=schemas.Token)
+def google_auth(auth_request: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Verifies a Google ID token and logs in/registers the user.
+    """
+    try:
+        # 1. Verify the token
+        # If you have the real client ID, pass it as the second argument.
+        # If using a placeholder in frontend, the token will have the REAL ID from frontend.
+        # For now, we'll try to verify without enforcing audience check if it's the placeholder,
+        # BUT google lib requires audience.
+        # We will assume the user will update GOOGLE_CLIENT_ID in main.py too.
+        
+        id_info = id_token.verify_oauth2_token(
+            auth_request.token, 
+            google_requests.Request(), 
+            audience=GOOGLE_CLIENT_ID
+        )
+
+        email = id_info['email']
+        name = id_info.get('name', '')
+        picture = id_info.get('picture', '')
+        
+        # 2. Check if user exists
+        user = db.query(models.User).filter(models.User.email == email).first()
+        
+        # Validation: If mode is register and user exists, return error
+        if auth_request.mode == 'register' and user:
+            raise HTTPException(status_code=400, detail="Account already exists. Please log in.")
+        
+        if not user:
+            # 3. Register new user
+            # Generate a random password (they won't use it, but we need it for DB)
+            import secrets
+            random_password = secrets.token_urlsafe(16)
+            hashed_password = utils.hash_password(random_password)
+            
+            # Generate username from email (part before @)
+            base_username = email.split("@")[0]
+            # Ensure uniqueness
+            username = base_username
+            counter = 1
+            while db.query(models.User).filter(models.User.username == username).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            new_user = models.User(
+                email=email,
+                hashed_password=hashed_password,
+                username=username,
+                full_name=name,
+                profile_picture_url=picture
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            user = new_user
+            
+        # 4. Create Access Token
+        access_token = auth.create_access_token(data={"user_id": user.id})
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(status_code=400, detail=f"Invalid Google Token: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Google Auth Error: {str(e)}")
+
 # --- NEW: PROTECTED ENDPOINT ---
 @app.get("/users/me", response_model=schemas.UserResponse)
 def get_user_me(current_user: models.User = Depends(get_current_user)):
@@ -157,11 +247,61 @@ def get_user_me(current_user: models.User = Depends(get_current_user)):
     A protected route that returns the information
     for the currently logged-in user.
     """
-    # Because of the Depends(get_current_user), this code
-    # will ONLY run if the user provides a valid token.
-    # The 'current_user' variable is the user object
     # returned from our get_current_user function.
     return current_user
+
+@app.put("/users/me", response_model=schemas.UserResponse)
+def update_user_me(
+    user_update: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Updates the currently logged-in user's profile.
+    """
+    # Check for username/email uniqueness if they are being changed
+    if user_update.email and user_update.email != current_user.email:
+        existing_email = db.query(models.User).filter(models.User.email == user_update.email).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        current_user.email = user_update.email
+
+    if user_update.username and user_update.username != current_user.username:
+        existing_username = db.query(models.User).filter(models.User.username == user_update.username).first()
+        if existing_username:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        current_user.username = user_update.username
+
+    if user_update.full_name is not None:
+        current_user.full_name = user_update.full_name
+
+    if user_update.password:
+        current_user.hashed_password = utils.hash_password(user_update.password)
+
+    if user_update.profile_picture_url:
+        current_user.profile_picture_url = user_update.profile_picture_url
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+# --- NEW: FILE UPLOAD ENDPOINT ---
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...), current_user: models.User = Depends(get_current_user)):
+    try:
+        # Create a unique filename
+        file_ext = os.path.splitext(file.filename)[1]
+        import uuid
+        filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = f"static/uploads/{filename}"
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Return the URL (relative to server root)
+        return {"url": f"http://localhost:8000/{file_path}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
 # --- NEW: CREATE JOURNAL ENTRY ENDPOINT ---
 @app.post("/journal-entries", status_code=status.HTTP_201_CREATED, response_model=schemas.JournalEntryResponse)
@@ -187,7 +327,10 @@ def create_journal_entry(
         text_content=entry.text_content,
         user_id=current_user.id,
         sentiment=sentiment_label, # Add the sentiment!
-        notebook_id=entry.notebook_id
+        notebook_id=entry.notebook_id,
+        image_url=entry.image_url,
+        latitude=str(entry.latitude) if entry.latitude is not None else None,
+        longitude=str(entry.longitude) if entry.longitude is not None else None
     )
     
     # 3. Add to database and commit
@@ -446,7 +589,7 @@ def create_notebook(notebook: schemas.NotebookCreate, db: Session = Depends(get_
 
 @app.get("/notebooks", response_model=List[schemas.NotebookResponse])
 def get_notebooks(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Notebook).filter(models.Notebook.user_id == current_user.id).all()
+    return db.query(models.Notebook).options(joinedload(models.Notebook.entries)).filter(models.Notebook.user_id == current_user.id).all()
 
 @app.delete("/notebooks/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_notebook(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -456,6 +599,88 @@ def delete_notebook(id: int, db: Session = Depends(get_db), current_user: models
     notebook_query.delete(synchronize_session=False)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@app.post("/notebooks/auto-generate", status_code=status.HTTP_201_CREATED, response_model=schemas.NotebookResponse)
+def auto_generate_notebook(
+    start_date: Optional[str] = None, # YYYY-MM-DD
+    end_date: Optional[str] = None,   # YYYY-MM-DD
+    mode: Optional[str] = "daily",    # daily, weekly, monthly, custom
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Automatically groups entries from a specific date range into a new notebook
+    and generates a title using AI summarization.
+    """
+    # 1. Determine the date range
+    try:
+        if start_date:
+            s_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        else:
+            s_date = date.today()
+            
+        if end_date:
+            e_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        else:
+            e_date = s_date # Default to single day if no end date
+            
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Create datetime range (Start of first day to End of last day)
+    start_dt = datetime.combine(s_date, datetime.min.time())
+    end_dt = datetime.combine(e_date, datetime.max.time())
+    
+    # 2. Find entries for this range that are NOT in a notebook
+    entries = db.query(models.JournalEntry).filter(
+        models.JournalEntry.user_id == current_user.id,
+        models.JournalEntry.created_at >= start_dt,
+        models.JournalEntry.created_at <= end_dt,
+        models.JournalEntry.notebook_id == None
+    ).all()
+    
+    if not entries:
+        raise HTTPException(status_code=404, detail="No uncategorized entries found for this period.")
+        
+    # 3. Generate Title
+    full_text = " ".join([e.text_content for e in entries])
+    
+    # Prefix based on mode
+    prefix = ""
+    if mode == "weekly":
+        prefix = "Weekly Recap: "
+    elif mode == "monthly":
+        prefix = "Monthly Review: "
+    elif mode == "custom":
+        prefix = f"Journal ({s_date.strftime('%b %d')} - {e_date.strftime('%b %d')}): "
+    else: # daily
+        prefix = f"{s_date.strftime('%b %d')}: "
+
+    if len(full_text) > 50:
+        try:
+            # Summarize
+            summary = summarizer(full_text, max_length=15, min_length=5, do_sample=False)
+            generated_title = summary[0]['summary_text'].strip()
+            final_title = f"{prefix}{generated_title}"
+        except Exception as e:
+            print(f"Summarization failed: {e}")
+            final_title = f"{prefix}Journal"
+    else:
+        final_title = f"{prefix}Journal"
+
+    # 4. Create Notebook
+    new_notebook = models.Notebook(title=final_title, user_id=current_user.id)
+    db.add(new_notebook)
+    db.commit()
+    db.refresh(new_notebook)
+    
+    # 5. Move entries to this notebook
+    for entry in entries:
+        entry.notebook_id = new_notebook.id
+    
+    db.commit()
+    
+    return new_notebook
 
 # --- NEW: VOICE JOURNAL ENTRY ENDPOINT ---
 @app.post("/journal-entries/voice", status_code=status.HTTP_201_CREATED, response_model=schemas.JournalEntryResponse)
@@ -588,8 +813,11 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     hashed_password = utils.hash_password(user.password)
     
     # 3. Generate Avatar (if not provided)
-    # Using DiceBear 'avataaars' style
-    profile_pic = f"https://api.dicebear.com/9.x/avataaars/svg?seed={user.username}"
+    # Using DiceBear 'avataaars' style with username + 4 random digits
+    import random
+    random_suffix = "".join([str(random.randint(0, 9)) for _ in range(4)])
+    seed = f"{user.username}{random_suffix}"
+    profile_pic = f"https://api.dicebear.com/9.x/avataaars/svg?seed={seed}"
     
     # 4. Create the new user object
     new_user = models.User(

@@ -33,6 +33,9 @@ class JournalEntry(Base):
     # This sets up the foreign key relationship to the 'users' table
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     text_content = Column(String, nullable=False)
+    image_url = Column(String, nullable=True) # New column for image uploads
+    latitude = Column(String, nullable=True) # Store as string for simplicity, or Float
+    longitude = Column(String, nullable=True)
     sentiment = Column(String, nullable=True) # For our stretch goal
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('now()'))
