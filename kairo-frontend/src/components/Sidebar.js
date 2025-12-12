@@ -26,7 +26,7 @@ function Sidebar({ currentView, onChangeView, onLogout, user, isOpen, onClose })
             <div className={`sidebar ${isOpen ? 'open' : ''}`}>
                 <div className="sidebar-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div className="app-logo">K</div>
+                        <img src={process.env.PUBLIC_URL + '/logo192.png'} alt="Kairo Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
                         <div className="app-name">Kairo</div>
                     </div>
                     <button className="close-sidebar-btn" onClick={onClose}>×</button>
