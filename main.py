@@ -338,7 +338,13 @@ def create_journal_entry(
     db.commit()
     db.refresh(new_entry) # Get the new data back from the DB (like the ID)
     
-    # 4. Return the new entry (now with sentiment!)
+    # 4. Update RAG Index
+    try:
+        add_entry_to_index(new_entry)
+    except Exception as e:
+        print(f"Failed to update index: {e}")
+
+    # 5. Return the new entry (now with sentiment!)
     return new_entry
 
 # --- NEW: GET ALL JOURNAL ENTRIES ENDPOINT ---
@@ -499,6 +505,28 @@ def refresh_vector_index(db: Session):
     index_id_to_entry_id = {i: entry_id for i, entry_id in enumerate(ids)}
     
     print(f"Index refreshed with {len(entries)} entries.")
+
+def add_entry_to_index(entry):
+    """
+    Adds a single new entry to the FAISS index.
+    """
+    global vector_index, index_id_to_entry_id
+    
+    if vector_index is None:
+        # Should have been initialized on startup, but just in case
+        vector_index = faiss.IndexFlatL2(384)
+        index_id_to_entry_id = {}
+        
+    # Embed
+    embedding = embedding_model.encode([entry.text_content])
+    
+    # Add
+    vector_index.add(np.array(embedding).astype('float32'))
+    
+    # Map (The new index is current total - 1)
+    new_idx = vector_index.ntotal - 1
+    index_id_to_entry_id[new_idx] = entry.id
+    print(f"Added entry {entry.id} to RAG index. Total: {vector_index.ntotal}")
 
 @app.on_event("startup")
 def startup_event():
@@ -726,6 +754,14 @@ async def create_voice_journal_entry(
             db.commit()
             db.refresh(new_entry)
             
+            db.refresh(new_entry)
+            
+            # 5. Update RAG Index
+            try:
+                add_entry_to_index(new_entry)
+            except Exception as e:
+                print(f"Failed to update index: {e}")
+
             return new_entry
             
         finally:

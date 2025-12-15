@@ -56,7 +56,8 @@ function Auth({ onLogin }) {
             <div className="auth-right">
                 <div className="auth-box">
                     <div className="auth-header">
-                        <h1>{isRegistering ? 'Create your account' : 'Welcome back'}</h1>
+                        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem', fontFamily: 'var(--font-heading)', color: 'var(--accent-primary)' }}>Kairo</h1>
+                        <h2 style={{ fontSize: '1.5rem', marginTop: 0 }}>{isRegistering ? 'Create your account' : 'Welcome back'}</h2>
                         <p>{isRegistering ? 'Join Kairo and start your journaling journey today.' : 'Ready to write? Log in to continue your journey.'}</p>
                     </div>
 
@@ -134,7 +135,7 @@ function Auth({ onLogin }) {
                         <div className="form-group">
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                                 <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
-                                {!isRegistering && <a href="#" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>Forgot Password?</a>}
+                                {!isRegistering && <button type="button" style={{ background: 'none', border: 'none', padding: 0, fontSize: '0.85rem', color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}>Forgot Password?</button>}
                             </div>
                             <input
                                 type="password"
@@ -177,10 +178,7 @@ function Auth({ onLogin }) {
                         </button>
                     </div>
 
-                    <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        <a href="#" style={{ color: 'var(--text-muted)', marginRight: '1rem' }}>Privacy Policy</a>
-                        <a href="#" style={{ color: 'var(--text-muted)' }}>Terms of Service</a>
-                    </div>
+
 
                 </div>
             </div>
