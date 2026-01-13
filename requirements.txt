@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+transformers
+librosa
+torch
+numpy
+sentence-transformers
+faiss-cpu
+python-dotenv
+google-auth
+requests
+python-multipart
+psycopg2-binary
