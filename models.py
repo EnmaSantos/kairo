@@ -19,7 +19,7 @@ class User(Base):
     profile_picture_url = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), 
-                        nullable=False, server_default=text('now()'))
+                        nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     
     notebooks = relationship("Notebook", back_populates="owner")
 
@@ -38,7 +38,7 @@ class JournalEntry(Base):
     longitude = Column(String, nullable=True)
     sentiment = Column(String, nullable=True) # For our stretch goal
     created_at = Column(TIMESTAMP(timezone=True), 
-                        nullable=False, server_default=text('now()'))
+                        nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     
     # This tells SQLAlchemy how to link this entry back to its owner (the User)
     owner = relationship("User")
@@ -52,7 +52,7 @@ class Notebook(Base):
     id = Column(Integer, primary_key=True, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     
     owner = relationship("User", back_populates="notebooks")
     entries = relationship("JournalEntry", back_populates="notebook")

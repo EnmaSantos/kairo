@@ -1,116 +1,154 @@
-# Kairo (Καιρός)
+# Kairo
 
-Kairo is a full-stack, voice-first web application designed to be an intelligent journal and reflective assistant. It uses a sophisticated AI pipeline to transcribe spoken entries, analyze them for sentiment, and enable natural language conversations with your journal to discover patterns in your thoughts.
+Kairo is a voice-first journaling app for capturing thoughts, organizing entries into notebooks, and exploring patterns across time. The backend is built with FastAPI and SQLAlchemy, and the frontend is a React app with a focused, editorial-style interface.
 
-## Features
+## What It Does
 
-- **Voice-First Journaling**: Record your thoughts naturally; Kairo transcribes them instantly using the Whisper model.
-- **Sentiment Analysis**: Automatically analyzes the emotional tone of your entries using BERT.
-- **Intelligent Q&A (RAG)**: Chat with your journal! Ask questions like "How have I been feeling about my project?" and get answers based on your past entries.
-- **Auto-Notebooks**: Automatically groups entries into daily, weekly, or monthly notebooks with AI-generated titles.
-- **Secure Authentication**: User sign-up/login with JWT and Google OAuth support.
-- **Rich Text Search**: Search through your journal entries by keyword or sentiment.
+Kairo combines quick capture, emotional context, and long-form reflection:
+
+- Record or type journal entries.
+- Upload images and attach location data to entries.
+- Search and filter entries by text or sentiment.
+- Group entries into notebooks, including auto-generated notebooks.
+- Explore entries through dashboard, timeline, calendar, map, and photo views.
+- Ask questions about your journal history through the chat experience.
+
+## Highlights
+
+- Voice-first entry flow with audio transcription support.
+- Sentiment tagging for journal entries.
+- Notebook organization for daily and thematic reflection.
+- Map and photo views for visual memory browsing.
+- Google auth and email/password login support.
+- Local-friendly development setup with SQLite by default.
+
+## Screenshots
+
+The app capture set lives in [docs/images](docs/images).
+
+### Auth
+
+![Kairo sign-in screen](docs/images/auth-page.png)
+
+Planned captures for the same folder: dashboard, journal composer, notebook library, and the timeline/calendar/map views.
 
 ## Tech Stack
 
 ### Backend
-- **Framework**: Python 3.9+, FastAPI
-- **Server**: Uvicorn
-- **Database**: PostgreSQL with SQLAlchemy ORM
-- **AI/ML**:
-  - `distil-whisper/distil-medium.en` (Speech-to-Text)
-  - `j-hartmann/emotion-english-distilroberta-base` (Sentiment Analysis)
-  - `all-MiniLM-L6-v2` (Embeddings for RAG)
-  - `faiss` (Vector Database for semantic search)
-  - `distilbart-cnn-12-6` (Summarization)
+
+- FastAPI
+- SQLAlchemy
+- SQLite for local development, PostgreSQL-compatible via `DATABASE_URL`
+- Hugging Face pipelines for transcription, sentiment, and summarization
+- Sentence Transformers and FAISS for retrieval features
 
 ### Frontend
-- **Framework**: React.js
-- **Styling**: Vanilla CSS / Custom Components
-- **HTTP Client**: Axios
 
-## Prerequisites
+- React
+- Axios
+- Anime.js
+- Leaflet and React Leaflet
+- React Calendar
 
-- Python 3.9 or higher
-- Node.js and npm
-- PostgreSQL installed and running
-- FFmpeg (required for audio processing with `librosa` and `whisper`)
+## Requirements
 
-## Installation
+- Python 3.9 or newer
+- Node.js 18+ and npm
+- FFmpeg for audio processing
+- Optional: PostgreSQL if you want to run against a managed database instead of SQLite
 
-### 1. Clone the Repository
+## Local Setup
 
-\`\`\`bash
-git clone <repository-url>
-cd kairo
-\`\`\`
+### 1. Install backend dependencies
 
-### 2. Backend Setup
+From the project root:
 
-It is recommended to use a virtual environment.
-
-\`\`\`bash
-# Create virtual environment
+```bash
 python3 -m venv kairo-env
-
-# Activate virtual environment
-source kairo-env/bin/activate  # On macOS/Linux
-# kairo-env\Scripts\activate   # On Windows
-
-# Install dependencies
+source kairo-env/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-\`\`\`
+```
 
-**Environment Variables:**
-Create a \`.env\` file in the root directory:
+### 2. Create local environment variables
 
-\`\`\`env
-# Database URL (Update with your credentials)
-DATABASE_URL=postgresql://user:password@localhost/kairo_db
+Create a `.env` file in the project root with:
 
-# Security (Generate a strong key)
-SECRET_KEY=your_secret_key_here
+```env
+DATABASE_URL=sqlite:///./kairo.db
+SECRET_KEY=dev-secret-key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+GOOGLE_CLIENT_ID=placeholder-client-id
+```
 
-# Google Auth (Optional)
-GOOGLE_CLIENT_ID=your_google_client_id
-\`\`\`
+For the frontend, create `kairo-frontend/.env` with:
 
-### 3. Frontend Setup
+```env
+REACT_APP_GOOGLE_CLIENT_ID=placeholder-client-id
+```
 
-\`\`\`bash
+### 3. Seed demo data
+
+The repository includes a seed script that creates a demo user and sample journal entries:
+
+```bash
+source kairo-env/bin/activate
+rm -f kairo.db
+python seed_data.py
+```
+
+Demo login:
+
+- Email: `jack.tucker@example.com`
+- Password: `password123`
+
+### 4. Install frontend dependencies
+
+```bash
 cd kairo-frontend
-npm install
-\`\`\`
+npm ci
+```
 
-## Running the Application
+## Run the App
 
-### Start the Backend Server
+### Backend
 
-From the root directory (with virtual env activated):
+From the project root:
 
-\`\`\`bash
-uvicorn main:app --reload
-\`\`\`
+```bash
+source kairo-env/bin/activate
+uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
-The API will run at \`http://127.0.0.1:8000\`.
-Swagger UI documentation is available at \`http://127.0.0.1:8000/docs\`.
+### Frontend
 
-### Start the Frontend Client
+From `kairo-frontend`:
 
-From the \`kairo-frontend\` directory:
-
-\`\`\`bash
+```bash
 npm start
-\`\`\`
+```
 
-The app will launch in your browser at \`http://localhost:3000\`.
+The frontend runs at `http://localhost:3000` and the API runs at `http://127.0.0.1:8000`.
 
-## Usage
+## Project Structure
 
-1.  **Sign Up/Login**: Create an account or log in.
-2.  **Record**: Click the microphone icon to start recording a journal entry. Speak your thoughts.
-3.  **Review**: See your transcribed entry appear with a sentiment tag (e.g., Joy, Sadness, Neutral).
-4.  **Chat**: Use the Chat interface to ask questions about your journal history.
-5.  **Organize**: Use the Auto-Generate Notebooks feature to organize scattered entries into summary notebooks.
+- `main.py`: FastAPI application entry point.
+- `models.py`: Database models.
+- `schemas.py`: Pydantic request and response schemas.
+- `auth.py`: JWT helpers and auth configuration.
+- `utils.py`: Password hashing utilities.
+- `seed_data.py`: Demo database seed script.
+- `kairo-frontend/`: React frontend.
+
+## Notes
+
+- The local setup now defaults to SQLite so the project can run without a PostgreSQL server.
+- The backend uses `python-jose`, `bcrypt`, and `email-validator`, which are included in `requirements.txt`.
+- Example env files are included at `.env.example` and `kairo-frontend/.env.example`.
+- If you switch back to PostgreSQL, update `DATABASE_URL` and rerun the seed script or migrations.
+
+## Next Improvements
+
+- Add the remaining dashboard, journal, and library screenshots to `docs/images`.
+- Add a short API reference section for the most-used endpoints.

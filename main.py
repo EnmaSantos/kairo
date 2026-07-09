@@ -66,8 +66,23 @@ index_id_to_entry_id = {}
 print("--- Embedding model loaded. ---")
 
 print("Loading Summarization model...")
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
-print("--- Summarization model loaded. ---")
+summarizer = None
+print("--- Summarization model unavailable; using fallback title generation. ---")
+
+
+def generate_notebook_title(prefix: str, full_text: str) -> str:
+    if len(full_text) <= 50:
+        return f"{prefix}Journal"
+
+    words = full_text.split()
+    snippet = " ".join(words[:12]).strip()
+    if not snippet:
+        return f"{prefix}Journal"
+
+    if len(words) > 12:
+        snippet = f"{snippet}..."
+
+    return f"{prefix}{snippet}"
 
 def get_db():
     db = SessionLocal()
@@ -684,17 +699,7 @@ def auto_generate_notebook(
     else: # daily
         prefix = f"{s_date.strftime('%b %d')}: "
 
-    if len(full_text) > 50:
-        try:
-            # Summarize
-            summary = summarizer(full_text, max_length=15, min_length=5, do_sample=False)
-            generated_title = summary[0]['summary_text'].strip()
-            final_title = f"{prefix}{generated_title}"
-        except Exception as e:
-            print(f"Summarization failed: {e}")
-            final_title = f"{prefix}Journal"
-    else:
-        final_title = f"{prefix}Journal"
+    final_title = generate_notebook_title(prefix, full_text)
 
     # 4. Create Notebook
     new_notebook = models.Notebook(title=final_title, user_id=current_user.id)
