@@ -2,22 +2,33 @@
  * Capture Kairo product screenshots for the README.
  * Requires: frontend on :3000, backend on :8000, demo user seeded.
  *
- *   node scripts/capture_screenshots.mjs
+ *   npm run screenshots
  */
 import { chromium } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUT = path.join(__dirname, '..', 'docs', 'images');
+const OUT = path.join(__dirname, '..', '..', 'docs', 'images');
 const BASE = 'http://localhost:3000';
 const DEMO_EMAIL = 'jack.tucker@example.com';
 const DEMO_PASSWORD = 'password123';
 
 fs.mkdirSync(OUT, { recursive: true });
 
-async function shot(page, name, opts = {}) {
+interface ScreenshotOptions {
+  settle?: number;
+  locator?: Locator;
+  fullPage?: boolean;
+}
+
+async function shot(
+  page: Page,
+  name: string,
+  opts: ScreenshotOptions = {},
+): Promise<void> {
   const file = path.join(OUT, `${name}.png`);
   await page.waitForTimeout(opts.settle ?? 500);
   if (opts.locator) {
@@ -28,7 +39,7 @@ async function shot(page, name, opts = {}) {
   console.log('✓', name);
 }
 
-async function main() {
+async function main(): Promise<void> {
   const browser = await chromium.launch({
     headless: true,
     args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
@@ -175,5 +186,5 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });

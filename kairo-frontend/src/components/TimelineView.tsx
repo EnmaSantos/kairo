@@ -1,6 +1,10 @@
-import React from 'react';
+import type { JournalEntry } from '../types';
 
-function TimelineView({ entries }) {
+interface TimelineViewProps {
+    entries: JournalEntry[];
+}
+
+export function TimelineView({ entries }: TimelineViewProps) {
     if (entries.length === 0) {
         return <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>No entries yet.</p>;
     }
@@ -17,7 +21,7 @@ function TimelineView({ entries }) {
                 background: 'var(--border-color)'
             }}></div>
 
-            {entries.map((entry, index) => (
+            {entries.map((entry) => (
                 <div key={entry.id} style={{
                     position: 'relative',
                     paddingLeft: '50px',
@@ -79,5 +83,3 @@ function TimelineView({ entries }) {
         </div>
     );
 }
-
-export default TimelineView;

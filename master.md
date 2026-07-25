@@ -14,7 +14,9 @@ Kairo is a "voice-first" intelligent journaling application. It removes the fric
 ## 2. Tech Stack
 
 ### Frontend (Client)
-* **Framework:** React.js (Create React App)
+* **Framework:** React 19 with strict TypeScript
+* **Build Tool:** Vite
+* **Testing:** Vitest + Testing Library
 * **Styling:** Custom CSS (Neo-Brutalism Design System)
 * **Animation:** Anime.js
 * **HTTP Client:** Axios

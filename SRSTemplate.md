@@ -62,7 +62,7 @@
 
 *Backend: Python 3.9, FastAPI, Uvicorn (ASGI Server)*
 
-*Frontend: React.js (JavaScript/HTML/CSS)*
+*Frontend: React 19, TypeScript, Vite, HTML, and CSS*
 
 *Database: PostgreSQL*
 

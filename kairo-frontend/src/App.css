@@ -12,6 +12,12 @@
   position: relative;
 }
 
+.view-loading {
+  color: var(--text-secondary);
+  padding: 2rem;
+  text-align: center;
+}
+
 /* --- Auth Container --- */
 .auth-wrapper {
   display: flex;
@@ -227,6 +233,8 @@
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
+  border: none;
+  padding: 0;
   z-index: 999;
 }
 
@@ -327,9 +335,14 @@
 .nav-item {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 10px;
   padding: 0.6rem 0.8rem;
   color: var(--text-secondary);
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -359,8 +372,15 @@
 
 .user-profile-mini {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -388,6 +408,14 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+button.stat-card {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .stat-icon-box {

@@ -1,10 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import api from '../api';
-import heic2any from 'heic2any';
-import NeoButton from './NeoButton';
+import type { User, UserUpdate } from '../types';
+import { getApiErrorDetail } from '../utils/errors';
+import { convertHeicToJpeg, isHeicImage } from '../utils/images';
+import { NeoButton } from './NeoButton';
 
-function Settings({ user, onUpdateUser }) {
-    const [formData, setFormData] = useState({
+interface SettingsProps {
+    user: User;
+    onUpdateUser: (user: User) => void;
+}
+
+interface SettingsFormData {
+    full_name: string;
+    username: string;
+    email: string;
+    password: string;
+}
+
+interface SettingsMessage {
+    type: 'success' | 'error';
+    text: string;
+}
+
+export function Settings({ user, onUpdateUser }: SettingsProps) {
+    const [formData, setFormData] = useState<SettingsFormData>({
         full_name: '',
         username: '',
         email: '',
@@ -12,30 +32,28 @@ function Settings({ user, onUpdateUser }) {
     });
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [message, setMessage] = useState(null);
+    const [message, setMessage] = useState<SettingsMessage | null>(null);
 
     useEffect(() => {
-        if (user) {
-            setFormData({
-                full_name: user.full_name || '',
-                username: user.username || '',
-                email: user.email || '',
-                password: ''
-            });
-        }
+        setFormData({
+            full_name: user.full_name || '',
+            username: user.username,
+            email: user.email,
+            password: ''
+        });
     }, [user]);
 
-    const handleChange = (e) => {
+    const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
         setIsLoading(true);
         setMessage(null);
 
         // Only send fields that have values (except password which is optional)
-        const updateData = {};
+        const updateData: UserUpdate = {};
         if (formData.full_name !== user.full_name) updateData.full_name = formData.full_name;
         if (formData.username !== user.username) updateData.username = formData.username;
         if (formData.email !== user.email) updateData.email = formData.email;
@@ -48,31 +66,37 @@ function Settings({ user, onUpdateUser }) {
         }
 
         try {
-            const token = localStorage.getItem('kairo_token');
+            const token = window.localStorage.getItem('kairo_token');
+            if (!token) {
+                throw new Error('Your session has expired.');
+            }
             const updatedUser = await api.updateUser(token, updateData);
-            if (onUpdateUser) onUpdateUser(updatedUser);
+            onUpdateUser(updatedUser);
             setMessage({ type: 'success', text: 'Profile updated successfully!' });
             setIsEditing(false);
             setFormData(prev => ({ ...prev, password: '' })); // Clear password
         } catch (err) {
             console.error('Failed to update profile:', err);
-            setMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to update profile.' });
+            setMessage({ type: 'error', text: getApiErrorDetail(err, 'Failed to update profile.') });
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleGenerateAvatar = async () => {
+    const handleGenerateAvatar = async (): Promise<void> => {
         setIsLoading(true);
         try {
             const randomSuffix = Math.floor(1000 + Math.random() * 9000);
             const seed = `${user.username}${randomSuffix}`;
             const newAvatarUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}`;
 
-            const token = localStorage.getItem('kairo_token');
+            const token = window.localStorage.getItem('kairo_token');
+            if (!token) {
+                throw new Error('Your session has expired.');
+            }
             const updatedUser = await api.updateUser(token, { profile_picture_url: newAvatarUrl });
 
-            if (onUpdateUser) onUpdateUser(updatedUser);
+            onUpdateUser(updatedUser);
             setMessage({ type: 'success', text: 'New avatar generated!' });
         } catch (err) {
             console.error('Failed to generate avatar:', err);
@@ -104,25 +128,22 @@ function Settings({ user, onUpdateUser }) {
                                         style={{ display: 'none' }}
                                         accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
                                         onChange={async (e) => {
-                                            let file = e.target.files[0];
+                                            let file = e.target.files?.[0];
                                             if (!file) return;
 
                                             setIsLoading(true);
                                             try {
-                                                // HEIC Conversion
-                                                if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic')) {
-                                                    const convertedBlob = await heic2any({
-                                                        blob: file,
-                                                        toType: 'image/jpeg',
-                                                        quality: 0.8
-                                                    });
-                                                    file = new File([convertedBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+                                                if (isHeicImage(file)) {
+                                                    file = await convertHeicToJpeg(file);
                                                 }
 
-                                                const token = localStorage.getItem('kairo_token');
+                                                const token = window.localStorage.getItem('kairo_token');
+                                                if (!token) {
+                                                    throw new Error('Your session has expired.');
+                                                }
                                                 const uploadRes = await api.uploadImage(token, file);
                                                 const updatedUser = await api.updateUser(token, { profile_picture_url: uploadRes.url });
-                                                if (onUpdateUser) onUpdateUser(updatedUser);
+                                                onUpdateUser(updatedUser);
                                                 setMessage({ type: 'success', text: 'Avatar updated!' });
                                             } catch (err) {
                                                 console.error('Avatar upload failed:', err);
@@ -134,7 +155,7 @@ function Settings({ user, onUpdateUser }) {
                                     />
                                     <div style={{ position: 'absolute', bottom: 0, right: 0, display: 'flex', gap: '5px' }}>
                                         <button
-                                            onClick={() => document.getElementById('avatar-upload').click()}
+                                            onClick={() => document.getElementById('avatar-upload')?.click()}
                                             type="button"
                                             title="Upload Photo"
                                             style={{
@@ -296,5 +317,3 @@ function Settings({ user, onUpdateUser }) {
         </div>
     );
 }
-
-export default Settings;

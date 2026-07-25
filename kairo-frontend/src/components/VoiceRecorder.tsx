@@ -1,17 +1,43 @@
-import React, { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './VoiceRecorder.css';
-import NeoButton from './NeoButton';
 import api from '../api';
+import type { JournalEntry, NotebookId } from '../types';
+import { NeoButton } from './NeoButton';
 
-const VoiceRecorder = ({ onTranscriptionComplete, onSave, token, notebookId }) => {
+interface VoiceRecorderProps {
+  onTranscriptionComplete: (text: string) => void;
+  onSave?: (entry: JournalEntry) => void;
+  token: string;
+  notebookId: NotebookId;
+}
+
+type RecordingAction = 'transcribe' | 'save';
+
+const apiUrl = new URL(import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000');
+const websocketProtocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+const TRANSCRIPTION_SOCKET_URL = `${websocketProtocol}//${apiUrl.host}/ws/transcribe`;
+
+export function VoiceRecorder({
+  onTranscriptionComplete,
+  onSave,
+  token,
+  notebookId,
+}: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [realTimeText, setRealTimeText] = useState('');
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const websocketRef = useRef(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const websocketRef = useRef<WebSocket | null>(null);
 
-  const startRecording = async () => {
+  useEffect(() => {
+    return () => {
+      websocketRef.current?.close();
+      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startRecording = async (): Promise<void> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -20,17 +46,16 @@ const VoiceRecorder = ({ onTranscriptionComplete, onSave, token, notebookId }) =
       setRealTimeText('');
 
       // --- WebSocket Setup ---
-      const ws = new WebSocket('ws://127.0.0.1:8000/ws/transcribe');
+      const ws = new WebSocket(TRANSCRIPTION_SOCKET_URL);
       websocketRef.current = ws;
 
       ws.onopen = () => {
         console.log('WebSocket connected');
       };
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.text) {
-          // The backend now returns the full transcription of the growing file
+      ws.onmessage = (event: MessageEvent<string>) => {
+        const data = JSON.parse(event.data) as { text?: unknown };
+        if (typeof data.text === 'string') {
           setRealTimeText(data.text);
         }
       };
@@ -60,41 +85,49 @@ const VoiceRecorder = ({ onTranscriptionComplete, onSave, token, notebookId }) =
     }
   };
 
-  const stopRecording = async (action = 'transcribe') => {
-    if (mediaRecorderRef.current && isRecording) {
-      // Close WebSocket
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
+  const stopRecording = (action: RecordingAction = 'transcribe'): void => {
+    const mediaRecorder = mediaRecorderRef.current;
+    if (mediaRecorder && isRecording) {
+      websocketRef.current?.close();
+      websocketRef.current = null;
 
-      mediaRecorderRef.current.onstop = async () => {
+      mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
-        // Stop all tracks
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
 
         if (action === 'transcribe') {
-          // Use the real-time text we already got!
-          // Or fall back to full transcription if needed (but let's trust the stream for now)
-          console.log('Final Real-time Text:', realTimeText);
           onTranscriptionComplete(realTimeText);
         } else if (action === 'save') {
           await handleSave(audioBlob);
         }
       };
 
-      mediaRecorderRef.current.stop();
+      mediaRecorder.stop();
       setIsRecording(false);
-      // setIsProcessing(true); // No need for processing spinner since we have text!
     }
   };
 
-  const handleSave = async (audioBlob) => {
+  const cancelRecording = (): void => {
+    websocketRef.current?.close();
+    websocketRef.current = null;
+
+    const mediaRecorder = mediaRecorderRef.current;
+    if (mediaRecorder) {
+      if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    }
+    setIsRecording(false);
+  };
+
+  const handleSave = async (audioBlob: Blob): Promise<void> => {
     setIsProcessing(true);
     try {
       const newEntry = await api.createVoiceEntry(token, audioBlob, notebookId);
       console.log('Voice entry created:', newEntry);
-      if (onSave) onSave(newEntry);
+      onSave?.(newEntry);
     } catch (error) {
       console.error('Save error:', error);
       alert('Failed to save voice entry.');
@@ -137,11 +170,7 @@ const VoiceRecorder = ({ onTranscriptionComplete, onSave, token, notebookId }) =
             <NeoButton
               text="❌ Cancel"
               color="#FF4747"
-              onClick={() => {
-                if (websocketRef.current) websocketRef.current.close();
-                mediaRecorderRef.current.stop();
-                setIsRecording(false);
-              }}
+              onClick={cancelRecording}
             />
           </div>
         </div>
@@ -155,7 +184,4 @@ const VoiceRecorder = ({ onTranscriptionComplete, onSave, token, notebookId }) =
       )}
     </div>
   );
-};
-
-export default VoiceRecorder;
-
+}

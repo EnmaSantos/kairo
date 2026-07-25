@@ -1,13 +1,30 @@
-import React, { useMemo } from 'react';
+import { lazy, useMemo, useState } from 'react';
 import { dailyPrompts } from '../prompts';
-import CalendarView from './CalendarView';
-import MapView from './MapView';
-import PhotosView from './PhotosView';
-import TimelineView from './TimelineView';
-import { useState } from 'react';
+import type { DashboardView, JournalEntry, User } from '../types';
+import { getSentimentEmoji } from '../utils/sentiment';
 
-function Dashboard({ user, entries, onNavigate, onPromptClick }) {
-    const [currentView, setCurrentView] = useState('list'); // list, calendar, map, photos, timeline
+const CalendarView = lazy(() => import('./CalendarView').then((module) => ({ default: module.CalendarView })));
+const MapView = lazy(() => import('./MapView').then((module) => ({ default: module.MapView })));
+const PhotosView = lazy(() => import('./PhotosView').then((module) => ({ default: module.PhotosView })));
+const TimelineView = lazy(() => import('./TimelineView').then((module) => ({ default: module.TimelineView })));
+
+interface DashboardProps {
+    user: User | null;
+    entries: JournalEntry[];
+    onPromptClick: (prompt: string) => void;
+}
+
+interface DashboardStat {
+    label: string;
+    value: string;
+    icon: string;
+    color: string;
+    subtext: string;
+    action?: () => void;
+}
+
+export function Dashboard({ user, entries, onPromptClick }: DashboardProps) {
+    const [currentView, setCurrentView] = useState<DashboardView>('list');
 
     // --- Dynamic Greeting ---
     const greeting = useMemo(() => {
@@ -43,7 +60,9 @@ function Dashboard({ user, entries, onNavigate, onPromptClick }) {
 
         // 2. Current Streak
         // Sort entries by date descending
-        const sortedEntries = [...entries].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const sortedEntries = [...entries].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
 
         let streak = 0;
         if (sortedEntries.length > 0) {
@@ -94,21 +113,8 @@ function Dashboard({ user, entries, onNavigate, onPromptClick }) {
                 color: '#238636',
                 subtext: 'This month.'
             },
-        ];
-    }, [entries, onPromptClick]);
-
-    // --- Emoji Helper ---
-    const getSentimentEmoji = (sentiment) => {
-        switch (sentiment?.toLowerCase()) {
-            case 'joy': return '😄';
-            case 'sadness': return '😢';
-            case 'anger': return '😠';
-            case 'fear': return '😨';
-            case 'surprise': return '😲';
-            case 'disgust': return '🤢';
-            default: return '📝';
-        }
-    };
+        ] satisfies DashboardStat[];
+    }, [dailyPrompt, entries, onPromptClick]);
 
     return (
         <div className="dashboard-container">
@@ -118,8 +124,9 @@ function Dashboard({ user, entries, onNavigate, onPromptClick }) {
             </header>
 
             <div className="dashboard-grid">
-                {stats.map((stat, index) => (
-                    <div key={index} className="stat-card" onClick={stat.action ? stat.action : undefined} style={{ cursor: stat.action ? 'pointer' : 'default' }}>
+                {stats.map((stat) => {
+                    const content = (
+                        <>
                         <div className="stat-icon-box" style={{ backgroundColor: `${stat.color} 20`, color: stat.color }}>
                             {stat.icon}
                         </div>
@@ -137,8 +144,19 @@ function Dashboard({ user, entries, onNavigate, onPromptClick }) {
                                 </>
                             )}
                         </div>
-                    </div>
-                ))}
+                        </>
+                    );
+
+                    return stat.action ? (
+                        <button key={stat.label} type="button" className="stat-card" onClick={stat.action}>
+                            {content}
+                        </button>
+                    ) : (
+                        <div key={stat.label} className="stat-card">
+                            {content}
+                        </div>
+                    );
+                })}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -215,5 +233,3 @@ function Dashboard({ user, entries, onNavigate, onPromptClick }) {
         </div>
     );
 }
-
-export default Dashboard;
