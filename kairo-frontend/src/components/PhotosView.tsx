@@ -1,7 +1,15 @@
-import React from 'react';
+import type { JournalEntry } from '../types';
 
-function PhotosView({ entries }) {
-    const entriesWithPhotos = entries.filter(e => e.image_url);
+interface PhotosViewProps {
+    entries: JournalEntry[];
+}
+
+type EntryWithPhoto = JournalEntry & { image_url: string };
+
+export function PhotosView({ entries }: PhotosViewProps) {
+    const entriesWithPhotos = entries.filter(
+        (entry): entry is EntryWithPhoto => Boolean(entry.image_url),
+    );
 
     if (entriesWithPhotos.length === 0) {
         return (
@@ -25,8 +33,7 @@ function PhotosView({ entries }) {
                     overflow: 'hidden',
                     aspectRatio: '1/1',
                     border: '1px solid var(--border-color)',
-                    cursor: 'pointer',
-                    group: 'photo-card'
+                    cursor: 'pointer'
                 }}>
                     <img
                         src={entry.image_url}
@@ -51,5 +58,3 @@ function PhotosView({ entries }) {
         </div>
     );
 }
-
-export default PhotosView;

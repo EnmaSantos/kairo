@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import api from '../api';
+import { getApiErrorDetail } from '../utils/errors';
 
-function Auth({ onLogin }) {
+interface AuthProps {
+    onLogin: (token: string) => void;
+}
+
+export function Auth({ onLogin }: AuthProps) {
     const [isRegistering, setIsRegistering] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -12,7 +18,7 @@ function Auth({ onLogin }) {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
@@ -66,15 +72,19 @@ function Auth({ onLogin }) {
                             onSuccess={async (credentialResponse) => {
                                 try {
                                     setIsLoading(true);
+                                    if (!credentialResponse.credential) {
+                                        throw new Error('Google did not return a sign-in credential.');
+                                    }
                                     const mode = isRegistering ? 'register' : 'login';
                                     const data = await api.googleLogin(credentialResponse.credential, mode);
                                     onLogin(data.access_token);
                                 } catch (err) {
                                     console.error('Google Login Failed', err);
-                                    if (err.response && err.response.data && err.response.data.detail && err.response.data.detail.includes("Account already exists")) {
+                                    const detail = getApiErrorDetail(err, 'Google Login failed. Please try again.');
+                                    if (detail.includes('Account already exists')) {
                                         setError("Account already exists. Please switch to Log In.");
                                     } else {
-                                        setError('Google Login failed. Please try again.');
+                                        setError(detail);
                                     }
                                 } finally {
                                     setIsLoading(false);
@@ -185,5 +195,3 @@ function Auth({ onLogin }) {
         </div>
     );
 }
-
-export default Auth;

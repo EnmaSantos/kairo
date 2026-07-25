@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import './CalendarView.css'; // We'll create this for custom styling
+import type { JournalEntry } from '../types';
 
-function CalendarView({ entries }) {
+interface CalendarViewProps {
+    entries: JournalEntry[];
+}
+
+export function CalendarView({ entries }: CalendarViewProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
 
     // Helper to check if a date has entries
-    const hasEntries = (date) => {
+    const hasEntries = (date: Date): boolean => {
         return entries.some(entry => {
             const entryDate = new Date(entry.created_at);
             return (
@@ -33,7 +38,11 @@ function CalendarView({ entries }) {
             <div style={{ flex: '1', minWidth: '300px' }}>
                 <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                     <Calendar
-                        onChange={setSelectedDate}
+                        onChange={(value) => {
+                            if (value instanceof Date) {
+                                setSelectedDate(value);
+                            }
+                        }}
                         value={selectedDate}
                         tileClassName={({ date, view }) => {
                             if (view === 'month' && hasEntries(date)) {
@@ -70,5 +79,3 @@ function CalendarView({ entries }) {
         </div>
     );
 }
-
-export default CalendarView;

@@ -1,16 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import NeoButton from './NeoButton';
-import VoiceRecorder from './VoiceRecorder';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import api from '../api';
 import anime from 'animejs';
-import heic2any from 'heic2any';
+import type {
+    ChatResponse,
+    JournalEntry,
+    LocationCoordinates,
+    NotebookSelectionId,
+} from '../types';
+import { convertHeicToJpeg, isHeicImage } from '../utils/images';
+import { getSentimentEmoji } from '../utils/sentiment';
+import { NeoButton } from './NeoButton';
+import { VoiceRecorder } from './VoiceRecorder';
 
-function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
-    const [entries, setEntries] = useState([]);
+interface JournalProps {
+    notebookId: NotebookSelectionId;
+    notebookTitle?: string;
+    token: string;
+    onBack: () => void;
+    initialText: string;
+}
+
+export function Journal({ notebookId, notebookTitle, token, onBack, initialText }: JournalProps) {
+    const [entries, setEntries] = useState<JournalEntry[]>([]);
     const [newEntryText, setNewEntryText] = useState(initialText || '');
-    const [newEntryImage, setNewEntryImage] = useState(null); // URL of uploaded image
-    const [location, setLocation] = useState(null); // { lat, lng }
-    const [viewingLocation, setViewingLocation] = useState(null); // { lat, lng } for modal
+    const [newEntryImage, setNewEntryImage] = useState<string | null>(null);
+    const [location, setLocation] = useState<LocationCoordinates | null>(null);
+    const [viewingLocation, setViewingLocation] = useState<LocationCoordinates | null>(null);
     const [isPosting, setIsPosting] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [sentimentFilter, setSentimentFilter] = useState('All');
@@ -18,9 +34,9 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
 
     // Chat State
     const [chatQuestion, setChatQuestion] = useState('');
-    const [chatAnswer, setChatAnswer] = useState(null);
+    const [chatAnswer, setChatAnswer] = useState<ChatResponse | null>(null);
     const [isChatting, setIsChatting] = useState(false);
-    const [expandedContextIds, setExpandedContextIds] = useState(new Set());
+    const [expandedContextIds, setExpandedContextIds] = useState<Set<number>>(() => new Set());
 
     useEffect(() => {
         if (initialText) {
@@ -29,9 +45,29 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
     }, [initialText]);
 
     useEffect(() => {
-        handleGetEntries();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [notebookId, searchQuery, sentimentFilter]);
+        let isCurrent = true;
+
+        const getEntries = async (): Promise<void> => {
+            try {
+                const data = await api.getEntries(
+                    token,
+                    searchQuery,
+                    sentimentFilter,
+                    notebookId === 'all' ? null : notebookId,
+                );
+                if (isCurrent) {
+                    setEntries(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch entries:', err);
+            }
+        };
+
+        void getEntries();
+        return () => {
+            isCurrent = false;
+        };
+    }, [notebookId, searchQuery, sentimentFilter, token]);
 
     // Animation Effect
     useEffect(() => {
@@ -46,20 +82,10 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
         }
     }, [entries]);
 
-    const handleGetEntries = async () => {
-        if (!token) return;
-        try {
-            const data = await api.getEntries(token, searchQuery, sentimentFilter, notebookId === 'all' ? null : notebookId);
-            setEntries(data);
-        } catch (err) {
-            console.error('Failed to fetch entries:', err);
-        }
-    };
-
-    const handleCreateEntry = async (e) => {
+    const handleCreateEntry = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
         // Allow submission if there is text OR an image
-        if (!token || isPosting || (!newEntryText.trim() && !newEntryImage)) return;
+        if (isPosting || (!newEntryText.trim() && !newEntryImage)) return;
         setIsPosting(true);
         setError('');
         try {
@@ -71,7 +97,7 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
                 location?.lat,
                 location?.lng
             );
-            setEntries([newEntry, ...entries]);
+            setEntries((current) => [newEntry, ...current]);
             setNewEntryText('');
             setNewEntryImage(null);
             setLocation(null);
@@ -83,20 +109,20 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
         }
     };
 
-    const handleDeleteEntry = async (entryId) => {
+    const handleDeleteEntry = async (entryId: number): Promise<void> => {
         if (!window.confirm("Are you sure you want to delete this entry?")) return;
         try {
             await api.deleteEntry(token, entryId);
-            setEntries(entries.filter(e => e.id !== entryId));
+            setEntries((current) => current.filter((entry) => entry.id !== entryId));
         } catch (err) {
             console.error('Failed to delete entry:', err);
             alert("Failed to delete entry.");
         }
     };
 
-    const handleChat = async (e) => {
+    const handleChat = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
-        if (!token || !chatQuestion.trim()) return;
+        if (!chatQuestion.trim()) return;
         setIsChatting(true);
         setChatAnswer(null);
         try {
@@ -110,26 +136,16 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
         }
     };
 
-    const toggleContextExpansion = (id) => {
-        const newSet = new Set(expandedContextIds);
-        if (newSet.has(id)) {
-            newSet.delete(id);
-        } else {
-            newSet.add(id);
-        }
-        setExpandedContextIds(newSet);
-    };
-
-    const getSentimentEmoji = (sentiment) => {
-        switch (sentiment?.toLowerCase()) {
-            case 'joy': return '😄';
-            case 'sadness': return '😢';
-            case 'anger': return '😠';
-            case 'fear': return '😨';
-            case 'surprise': return '😲';
-            case 'disgust': return '🤢';
-            default: return '📝';
-        }
+    const toggleContextExpansion = (id: number): void => {
+        setExpandedContextIds((current) => {
+            const next = new Set(current);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
     };
 
     return (
@@ -180,7 +196,7 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
 
                         <VoiceRecorder
                             onTranscriptionComplete={(text) => setNewEntryText(text)}
-                            onSave={(entry) => setEntries([entry, ...entries])}
+                            onSave={(entry) => setEntries((current) => [entry, ...current])}
                             token={token}
                             notebookId={notebookId === 'all' ? null : notebookId}
                         />
@@ -227,18 +243,12 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
                                         style={{ display: 'none' }}
                                         accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
                                         onChange={async (e) => {
-                                            let file = e.target.files[0];
+                                            let file = e.target.files?.[0];
                                             if (!file) return;
 
-                                            // HEIC Conversion
-                                            if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic')) {
+                                            if (isHeicImage(file)) {
                                                 try {
-                                                    const convertedBlob = await heic2any({
-                                                        blob: file,
-                                                        toType: 'image/jpeg',
-                                                        quality: 0.8
-                                                    });
-                                                    file = new File([convertedBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+                                                    file = await convertHeicToJpeg(file);
                                                 } catch (err) {
                                                     console.error('HEIC conversion failed:', err);
                                                     alert('Could not convert HEIC image.');
@@ -258,7 +268,7 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
                                     />
                                     <button
                                         type="button"
-                                        onClick={() => document.getElementById('entry-image-upload').click()}
+                                        onClick={() => document.getElementById('entry-image-upload')?.click()}
                                         style={{
                                             background: 'none',
                                             border: 'none',
@@ -355,23 +365,35 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
                                             {chatAnswer.context.map((ctx) => {
                                                 const isExpanded = expandedContextIds.has(ctx.id);
                                                 return (
-                                                    <li
-                                                        key={ctx.id}
-                                                        style={{ fontSize: '0.9rem', marginBottom: '8px', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                                                        onClick={() => toggleContextExpansion(ctx.id)}
-                                                    >
-                                                        {isExpanded ? (
-                                                            <>
-                                                                <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>[Collapse] </span>
-                                                                "{ctx.text}"
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>[Expand] </span>
-                                                                "{ctx.text.substring(0, 100)}..."
-                                                            </>
-                                                        )}
-                                                        <span className="sentiment-tag" style={{ marginLeft: '10px' }}>#{ctx.sentiment}</span>
+                                                    <li key={ctx.id} style={{ marginBottom: '8px' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleContextExpansion(ctx.id)}
+                                                            aria-expanded={isExpanded}
+                                                            style={{
+                                                                padding: 0,
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                color: 'var(--text-secondary)',
+                                                                cursor: 'pointer',
+                                                                font: 'inherit',
+                                                                fontSize: '0.9rem',
+                                                                textAlign: 'left',
+                                                            }}
+                                                        >
+                                                            {isExpanded ? (
+                                                                <>
+                                                                    <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>[Collapse] </span>
+                                                                    "{ctx.text}"
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>[Expand] </span>
+                                                                    "{ctx.text.substring(0, 100)}..."
+                                                                </>
+                                                            )}
+                                                            <span className="sentiment-tag" style={{ marginLeft: '10px' }}>#{ctx.sentiment}</span>
+                                                        </button>
                                                     </li>
                                                 );
                                             })}
@@ -401,7 +423,14 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
                                     )}
                                     {entry.latitude && entry.longitude && (
                                         <button
-                                            onClick={() => setViewingLocation({ lat: entry.latitude, lng: entry.longitude })}
+                                            onClick={() => {
+                                                if (entry.latitude !== null && entry.longitude !== null) {
+                                                    setViewingLocation({
+                                                        lat: entry.latitude,
+                                                        lng: entry.longitude,
+                                                    });
+                                                }
+                                            }}
                                             style={{
                                                 marginLeft: '10px',
                                                 background: 'none',
@@ -504,5 +533,3 @@ function Journal({ notebookId, notebookTitle, token, onBack, initialText }) {
         </div>
     );
 }
-
-export default Journal;

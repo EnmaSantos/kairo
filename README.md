@@ -171,7 +171,9 @@ A few choices that shaped the project:
 
 ### Frontend
 
-- **React**
+- **React 19** + **TypeScript**
+- **Vite**
+- **Vitest** + Testing Library
 - **Axios**
 - **Anime.js**
 - **Leaflet** / React Leaflet
@@ -184,7 +186,7 @@ A few choices that shaped the project:
 ### Requirements
 
 - Python 3.9+
-- Node.js 18+ and npm
+- Node.js 20.19+ and npm
 - FFmpeg (for audio)
 - Optional: PostgreSQL if you prefer it over SQLite
 
@@ -212,7 +214,8 @@ GOOGLE_CLIENT_ID=placeholder-client-id
 Frontend `kairo-frontend/.env` (see `.env.example`):
 
 ```env
-REACT_APP_GOOGLE_CLIENT_ID=placeholder-client-id
+VITE_API_URL=http://127.0.0.1:8000
+VITE_GOOGLE_CLIENT_ID=placeholder-client-id
 ```
 
 ### 3. Seed demo data
@@ -249,7 +252,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 **UI** (`kairo-frontend`):
 
 ```bash
-npm start
+npm run dev
 ```
 
 - Frontend: [http://localhost:3000](http://localhost:3000)

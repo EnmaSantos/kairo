@@ -1,23 +1,33 @@
-import React, { useState } from 'react';
-import NeoButton from './NeoButton';
-import NotebookCard from './NotebookCard';
+import { useState } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import axios from 'axios';
 import api from '../api';
+import type { GenerationMode, Notebook, NotebookSelectionId } from '../types';
+import { NeoButton } from './NeoButton';
+import { NotebookCard } from './NotebookCard';
 
-function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
+interface LibraryProps {
+    notebooks: Notebook[];
+    setNotebooks: Dispatch<SetStateAction<Notebook[]>>;
+    onSelectNotebook: (notebookId: NotebookSelectionId) => void;
+    token: string;
+}
+
+export function Library({ notebooks, setNotebooks, onSelectNotebook, token }: LibraryProps) {
     const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
     const [newNotebookTitle, setNewNotebookTitle] = useState('');
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [genStartDate, setGenStartDate] = useState('');
     const [genEndDate, setGenEndDate] = useState('');
-    const [genMode, setGenMode] = useState('daily');
+    const [genMode, setGenMode] = useState<GenerationMode>('daily');
     const [isGenerating, setIsGenerating] = useState(false);
 
-    const handleCreateNotebook = async (e) => {
+    const handleCreateNotebook = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
         if (!newNotebookTitle.trim()) return;
         try {
             const newNotebook = await api.createNotebook(token, newNotebookTitle);
-            setNotebooks([...notebooks, newNotebook]);
+            setNotebooks((current) => [...current, newNotebook]);
             setNewNotebookTitle('');
             setIsCreatingNotebook(false);
         } catch (err) {
@@ -26,21 +36,21 @@ function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
         }
     };
 
-    const handleDeleteNotebook = async (id) => {
+    const handleDeleteNotebook = async (id: number): Promise<void> => {
         if (!window.confirm("Are you sure? This will NOT delete the entries inside, but they will become uncategorized.")) return;
         try {
             await api.deleteNotebook(token, id);
-            setNotebooks(notebooks.filter(n => n.id !== id));
+            setNotebooks((current) => current.filter((notebook) => notebook.id !== id));
         } catch (err) {
             console.error('Failed to delete notebook:', err);
             alert('Failed to delete notebook.');
         }
     };
 
-    const handleQuickSelect = (mode) => {
+    const handleQuickSelect = (mode: GenerationMode): void => {
         setGenMode(mode);
         const today = new Date();
-        const formatDate = (d) => d.toISOString().split('T')[0];
+        const formatDate = (date: Date): string => date.toISOString().split('T')[0] ?? '';
 
         if (mode === 'daily') {
             setGenStartDate(formatDate(today));
@@ -63,16 +73,16 @@ function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
         }
     };
 
-    const handleAutoGenerateNotebook = async () => {
+    const handleAutoGenerateNotebook = async (): Promise<void> => {
         setIsGenerating(true);
         try {
             const newNotebook = await api.autoGenerateNotebook(token, genStartDate, genEndDate, genMode);
-            setNotebooks([...notebooks, newNotebook]);
+            setNotebooks((current) => [...current, newNotebook]);
             alert(`Generated notebook: ${newNotebook.title}`);
             setShowGenerateModal(false);
         } catch (err) {
             console.error('Failed to auto-generate:', err);
-            if (err.response && err.response.status === 404) {
+            if (axios.isAxiosError(err) && err.response?.status === 404) {
                 alert("No uncategorized entries found for this period.");
             } else {
                 alert('Failed to generate notebook.');
@@ -117,7 +127,7 @@ function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
                             <select
                                 className="neo-input"
                                 value={genMode}
-                                onChange={(e) => handleQuickSelect(e.target.value)}
+                                onChange={(e) => handleQuickSelect(e.target.value as GenerationMode)}
                             >
                                 <option value="daily">Today</option>
                                 <option value="weekly">Last 7 Days</option>
@@ -196,7 +206,19 @@ function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
 
             <div className="notebook-grid">
                 {/* "All Entries" Card */}
-                <div className="notebook-card all-entries-card" onClick={() => onSelectNotebook('all')} style={{ background: 'linear-gradient(135deg, #2F81F7 0%, #0D1117 100%)', borderColor: 'transparent' }}>
+                <div
+                    className="notebook-card all-entries-card"
+                    onClick={() => onSelectNotebook('all')}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onSelectNotebook('all');
+                        }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    style={{ background: 'linear-gradient(135deg, #2F81F7 0%, #0D1117 100%)', borderColor: 'transparent' }}
+                >
                     <div className="card-body" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                         <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>📂</span>
                         <h3 className="card-title" style={{ color: 'white' }}>All Entries</h3>
@@ -216,5 +238,3 @@ function Library({ notebooks, setNotebooks, onSelectNotebook, token }) {
         </div>
     );
 }
-
-export default Library;
