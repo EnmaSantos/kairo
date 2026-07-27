@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Optional, List
 
 # --- User Schemas ---
 
@@ -24,17 +24,14 @@ class UserUpdate(BaseModel):
 # This is the shape of data we will *return* to the user
 # We NEVER want to return the password, even the hash.
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: EmailStr
     username: str
     full_name: Optional[str] = None
     profile_picture_url: Optional[str] = None
     created_at: datetime
-
-    # This Pydantic config tells it to read data
-    # even if it's not a dict (like our SQLAlchemy model)
-    class Config:
-        from_attributes = True
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -60,8 +57,19 @@ class JournalEntryCreate(BaseModel):
     image_url: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    sentiment: Optional[str] = None
+    emotion_label: Optional[str] = None
+    emotion_scores: Optional[Dict[str, float]] = None
+    voice_emotion: Optional[str] = None
+    voice_emotion_scores: Optional[Dict[str, float]] = None
+    summary: Optional[str] = None
+    ai_model_versions: Optional[Dict[str, str]] = None
+    ai_processed_at: Optional[datetime] = None
+    source_type: str = Field(default="text", pattern="^(text|voice)$")
 
 class JournalEntryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     """ The shape of data we will send back. """
     id: int
     text_content: str
@@ -72,20 +80,24 @@ class JournalEntryResponse(BaseModel):
     image_url: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-
-    class Config:
-        from_attributes = True
+    emotion_label: Optional[str] = None
+    emotion_scores: Optional[Dict[str, float]] = None
+    voice_emotion: Optional[str] = None
+    voice_emotion_scores: Optional[Dict[str, float]] = None
+    summary: Optional[str] = None
+    ai_model_versions: Optional[Dict[str, str]] = None
+    ai_processed_at: Optional[datetime] = None
+    source_type: str = "text"
 
 # --- Notebook Schemas ---
 class NotebookCreate(BaseModel):
     title: str
 
 class NotebookResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     created_at: datetime
     user_id: int
     entries: List[JournalEntryResponse] = []
-
-    class Config:
-        from_attributes = True

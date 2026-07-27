@@ -2,12 +2,11 @@ import axios from 'axios';
 
 import type {
   AuthToken,
-  ChatResponse,
+  CreateEntryInput,
   GenerationMode,
   JournalEntry,
   Notebook,
   NotebookId,
-  TranscriptionResponse,
   UploadResponse,
   User,
   UserUpdate,
@@ -116,20 +115,25 @@ export const api = {
 
   createEntry: async (
     token: string,
-    textContent: string,
-    notebookId: NotebookId = null,
-    imageUrl: string | null = null,
-    latitude: number | null = null,
-    longitude: number | null = null,
+    input: CreateEntryInput,
   ): Promise<JournalEntry> => {
     const response = await axios.post<JournalEntry>(
       `${API_URL}/journal-entries`,
       {
-        text_content: textContent,
-        notebook_id: notebookId,
-        image_url: imageUrl,
-        latitude,
-        longitude,
+        text_content: input.textContent,
+        notebook_id: input.notebookId ?? null,
+        image_url: input.imageUrl ?? null,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+        sentiment: input.sentiment ?? null,
+        emotion_label: input.emotion_label ?? null,
+        emotion_scores: input.emotion_scores ?? null,
+        voice_emotion: input.voice_emotion ?? null,
+        voice_emotion_scores: input.voice_emotion_scores ?? null,
+        summary: input.summary ?? null,
+        ai_model_versions: input.ai_model_versions ?? null,
+        ai_processed_at: input.ai_processed_at ?? null,
+        source_type: input.source_type ?? 'text',
       },
       { headers: authHeaders(token) },
     );
@@ -140,46 +144,6 @@ export const api = {
     await axios.delete(`${API_URL}/journal-entries/${entryId}`, {
       headers: authHeaders(token),
     });
-  },
-
-  transcribeAudio: async (
-    token: string,
-    audioBlob: Blob,
-  ): Promise<TranscriptionResponse> => {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    const response = await axios.post<TranscriptionResponse>(
-      `${API_URL}/transcribe-audio`,
-      formData,
-      { headers: authHeaders(token) },
-    );
-    return response.data;
-  },
-
-  createVoiceEntry: async (
-    token: string,
-    audioBlob: Blob,
-    notebookId: NotebookId = null,
-  ): Promise<JournalEntry> => {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    if (notebookId !== null) formData.append('notebook_id', notebookId.toString());
-
-    const response = await axios.post<JournalEntry>(
-      `${API_URL}/journal-entries/voice`,
-      formData,
-      { headers: authHeaders(token) },
-    );
-    return response.data;
-  },
-
-  chatWithJournal: async (token: string, question: string): Promise<ChatResponse> => {
-    const response = await axios.post<ChatResponse>(
-      `${API_URL}/chat`,
-      { question },
-      { headers: authHeaders(token) },
-    );
-    return response.data;
   },
 
   autoGenerateNotebook: async (

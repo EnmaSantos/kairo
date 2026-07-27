@@ -3,7 +3,15 @@ import axios from 'axios';
 import { Menu, RefreshCw } from 'lucide-react';
 import './App.css';
 import api from './api';
-import type { AppView, JournalEntry, Notebook, NotebookSelectionId, User } from './types';
+import localAI from './localAI';
+import type {
+  AIStatus,
+  AppView,
+  JournalEntry,
+  Notebook,
+  NotebookSelectionId,
+  User,
+} from './types';
 import { Auth } from './components/Auth';
 import { Button } from './components/Button';
 import { LoadingState } from './components/LoadingState';
@@ -35,6 +43,59 @@ export function App({ googleOAuthEnabled = false }: AppProps) {
   const [initialEntryText, setInitialEntryText] = useState('');
   const [isInitialLoading, setIsInitialLoading] = useState(Boolean(token));
   const [dataError, setDataError] = useState('');
+  const [aiStatus, setAIStatus] = useState<AIStatus>(() => (
+    localAI.isEnabled
+      ? {
+          mode: 'local',
+          available: false,
+          checking: true,
+          message: 'Checking Kairo Local…',
+          capabilities: null,
+        }
+      : {
+          mode: 'hosted',
+          available: false,
+          checking: false,
+          message: 'AI tools are available only in Kairo Local.',
+          capabilities: null,
+        }
+  ));
+
+  useEffect(() => {
+    if (!localAI.isEnabled) return;
+    let isCurrent = true;
+
+    const checkLocalAI = async (): Promise<void> => {
+      try {
+        const capabilities = await localAI.getCapabilities();
+        if (!isCurrent) return;
+        setAIStatus({
+          mode: 'local',
+          available: capabilities.ready,
+          checking: false,
+          message: capabilities.ready
+            ? 'Local AI is ready.'
+            : 'Some local AI models are missing.',
+          capabilities,
+        });
+      } catch (error) {
+        console.error('Local AI companion is unavailable:', error);
+        if (!isCurrent) return;
+        setAIStatus({
+          mode: 'local',
+          available: false,
+          checking: false,
+          message: 'Start the Kairo Local companion to use AI tools.',
+          capabilities: null,
+        });
+      }
+    };
+
+    void checkLocalAI();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -214,6 +275,8 @@ export function App({ googleOAuthEnabled = false }: AppProps) {
                   initialText={initialEntryText}
                   onEntryCreated={handleEntryCreated}
                   onEntryDeleted={handleEntryDeleted}
+                  chatEntries={allEntries}
+                  aiStatus={aiStatus}
                 />
               )}
 

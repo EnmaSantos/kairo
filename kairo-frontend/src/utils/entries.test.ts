@@ -12,6 +12,14 @@ const entry = (text_content: string): JournalEntry => ({
   image_url: null,
   latitude: null,
   longitude: null,
+  emotion_label: null,
+  emotion_scores: null,
+  voice_emotion: null,
+  voice_emotion_scores: null,
+  summary: null,
+  ai_model_versions: null,
+  ai_processed_at: null,
+  source_type: 'text',
 });
 
 describe('entry presentation', () => {

@@ -1398,6 +1398,40 @@ button.stat-card:hover {
   margin-bottom: 1rem;
 }
 
+.chat-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.ai-runtime-badge,
+.ai-detail-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0.28rem 0.5rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-round);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ai-runtime-badge.ready {
+  color: #78d8aa;
+  background: rgba(78, 184, 137, 0.08);
+  border-color: rgba(78, 184, 137, 0.2);
+}
+
+.ai-detail-badge {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.18);
+}
+
 .chat-heading-icon {
   display: inline-flex;
   align-items: center;

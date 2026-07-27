@@ -1,14 +1,11 @@
 from database import engine
-from sqlalchemy import text
+from migrations import migrate_database
+import models
 
 def migrate():
-    with engine.connect() as connection:
-        try:
-            connection.execute(text("ALTER TABLE journal_entries ADD COLUMN image_url VARCHAR"))
-            connection.commit()
-            print("Successfully added image_url column to journal_entries table.")
-        except Exception as e:
-            print(f"Migration failed (column might already exist): {e}")
+    models.Base.metadata.create_all(bind=engine)
+    migrate_database(engine)
+    print("Kairo database schema is up to date.")
 
 if __name__ == "__main__":
     migrate()

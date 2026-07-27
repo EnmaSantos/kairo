@@ -14,7 +14,9 @@ import {
     X,
 } from 'lucide-react';
 import api from '../api';
+import localAI from '../localAI';
 import type {
+    AIStatus,
     ChatResponse,
     JournalEntry,
     LocationCoordinates,
@@ -34,6 +36,8 @@ interface JournalProps {
     initialText: string;
     onEntryCreated: (entry: JournalEntry) => void;
     onEntryDeleted: (entryId: number) => void;
+    chatEntries: JournalEntry[];
+    aiStatus: AIStatus;
 }
 
 export function Journal({
@@ -44,6 +48,8 @@ export function Journal({
     initialText,
     onEntryCreated,
     onEntryDeleted,
+    chatEntries,
+    aiStatus,
 }: JournalProps) {
     const [entries, setEntries] = useState<JournalEntry[]>([]);
     const [newEntryText, setNewEntryText] = useState(initialText || '');
@@ -110,18 +116,39 @@ export function Journal({
         setIsPosting(true);
         setError('');
         try {
+            let aiMetadata = {};
+            let analysisWarning = '';
+            if (aiStatus.available && newEntryText.trim()) {
+                try {
+                    const analysis = await localAI.analyzeText(newEntryText.trim());
+                    aiMetadata = {
+                        sentiment: analysis.sentiment,
+                        emotion_label: analysis.primary_emotion,
+                        emotion_scores: analysis.scores,
+                        ai_model_versions: { text_emotion: analysis.model },
+                        ai_processed_at: new Date().toISOString(),
+                    };
+                } catch (analysisError) {
+                    console.error('Local text analysis failed:', analysisError);
+                    analysisWarning = 'Entry saved, but local emotion analysis was unavailable.';
+                }
+            }
             const newEntry = await api.createEntry(
                 token,
-                newEntryText.trim(),
-                notebookId === 'all' ? null : notebookId,
-                newEntryImage,
-                location?.lat,
-                location?.lng,
+                {
+                    textContent: newEntryText.trim(),
+                    notebookId: notebookId === 'all' ? null : notebookId,
+                    imageUrl: newEntryImage,
+                    latitude: location?.lat,
+                    longitude: location?.lng,
+                    ...aiMetadata,
+                },
             );
             addEntryToView(newEntry);
             setNewEntryText('');
             setNewEntryImage(null);
             setLocation(null);
+            if (analysisWarning) setError(analysisWarning);
         } catch (requestError) {
             console.error('Failed to create entry:', requestError);
             setError('Your entry could not be saved. Your text is still here so you can try again.');
@@ -188,8 +215,13 @@ export function Journal({
         setIsChatting(true);
         setChatAnswer(null);
         setChatError('');
+        if (!aiStatus.available) {
+            setChatError(aiStatus.message);
+            setIsChatting(false);
+            return;
+        }
         try {
-            setChatAnswer(await api.chatWithJournal(token, chatQuestion.trim()));
+            setChatAnswer(await localAI.chat(chatQuestion.trim(), chatEntries));
         } catch (requestError) {
             console.error('Journal chat failed:', requestError);
             setChatError('Kairo could not search your journal right now. Please try again.');
@@ -281,6 +313,7 @@ export function Journal({
                             onSave={addEntryToView}
                             token={token}
                             notebookId={notebookId === 'all' ? null : notebookId}
+                            aiStatus={aiStatus}
                         />
 
                         <form onSubmit={handleCreateEntry} className="entry-form">
@@ -367,8 +400,15 @@ export function Journal({
                             <span className="chat-heading-icon"><Sparkles aria-hidden="true" /></span>
                             <div>
                                 <h2>Ask your journal</h2>
-                                <p>Search the themes and patterns in your previous entries.</p>
+                                <p>
+                                    {aiStatus.available
+                                        ? 'Search the themes and patterns in your previous entries locally.'
+                                        : aiStatus.message}
+                                </p>
                             </div>
+                            <span className={`ai-runtime-badge ${aiStatus.available ? 'ready' : ''}`}>
+                                {aiStatus.available ? 'Local AI' : 'Viewer mode'}
+                            </span>
                         </div>
                         <form onSubmit={handleChat} className="chat-form">
                             <label className="sr-only" htmlFor="journal-question">Question for your journal</label>
@@ -385,7 +425,7 @@ export function Journal({
                                 variant="secondary"
                                 icon={<MessageSquareText aria-hidden="true" />}
                                 isLoading={isChatting}
-                                disabled={!chatQuestion.trim()}
+                                disabled={!chatQuestion.trim() || !aiStatus.available}
                             >
                                 Ask
                             </Button>
@@ -477,6 +517,22 @@ export function Journal({
                                                 {entry.sentiment && (
                                                     <span className={`sentiment-badge ${entry.sentiment.toLowerCase()}`}>
                                                         {formatSentiment(entry.sentiment)}
+                                                    </span>
+                                                )}
+                                                {entry.emotion_label && entry.emotion_label !== entry.sentiment && (
+                                                    <span
+                                                        className="ai-detail-badge"
+                                                        title="Detailed emotion detected locally"
+                                                    >
+                                                        {formatSentiment(entry.emotion_label)}
+                                                    </span>
+                                                )}
+                                                {entry.voice_emotion && (
+                                                    <span
+                                                        className="ai-detail-badge"
+                                                        title="Vocal emotion signal detected locally"
+                                                    >
+                                                        Voice: {formatSentiment(entry.voice_emotion)}
                                                     </span>
                                                 )}
                                                 {entry.latitude !== null && entry.longitude !== null && (

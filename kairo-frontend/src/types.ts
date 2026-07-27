@@ -45,6 +45,14 @@ export interface JournalEntry {
   image_url: string | null;
   latitude: number | null;
   longitude: number | null;
+  emotion_label: string | null;
+  emotion_scores: Record<string, number> | null;
+  voice_emotion: string | null;
+  voice_emotion_scores: Record<string, number> | null;
+  summary: string | null;
+  ai_model_versions: Record<string, string> | null;
+  ai_processed_at: string | null;
+  source_type: 'text' | 'voice';
 }
 
 export interface Notebook {
@@ -66,7 +74,11 @@ export interface UploadResponse {
 
 export interface TranscriptionResponse {
   text: string;
-  success: boolean;
+  chunks: Array<{
+    text: string;
+    timestamp: [number | null, number | null];
+  }>;
+  model: string;
 }
 
 export interface ChatContextEntry {
@@ -80,4 +92,70 @@ export interface ChatContextEntry {
 export interface ChatResponse {
   answer: string;
   context: ChatContextEntry[];
+  models?: Record<string, string>;
+}
+
+export interface TextEmotionAnalysis {
+  primary_emotion: string;
+  sentiment: string;
+  scores: Record<string, number>;
+  model: string;
+}
+
+export interface VoiceEmotionAnalysis {
+  primary_emotion: string;
+  scores: Record<string, number>;
+  model: string;
+}
+
+export interface VoiceProcessingResponse {
+  text: string;
+  chunks: TranscriptionResponse['chunks'];
+  text_emotion: TextEmotionAnalysis;
+  voice_emotion: VoiceEmotionAnalysis;
+  processed_at: string;
+  models: Record<string, string>;
+}
+
+export interface EntryAIData {
+  sentiment?: string | null;
+  emotion_label?: string | null;
+  emotion_scores?: Record<string, number> | null;
+  voice_emotion?: string | null;
+  voice_emotion_scores?: Record<string, number> | null;
+  summary?: string | null;
+  ai_model_versions?: Record<string, string> | null;
+  ai_processed_at?: string | null;
+  source_type?: 'text' | 'voice';
+}
+
+export interface CreateEntryInput extends EntryAIData {
+  textContent: string;
+  notebookId?: NotebookId;
+  imageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface LocalAIModelCapability {
+  available: boolean;
+  path: string;
+  model: string;
+}
+
+export interface LocalAICapabilities {
+  runtime: 'local';
+  device: string;
+  models_dir: string;
+  models: Record<string, LocalAIModelCapability>;
+  ready: boolean;
+  active_model: string | null;
+}
+
+export interface AIStatus {
+  mode: 'local' | 'hosted';
+  available: boolean;
+  checking: boolean;
+  message: string;
+  capabilities: LocalAICapabilities | null;
 }

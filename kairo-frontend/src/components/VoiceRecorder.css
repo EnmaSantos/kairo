@@ -2,6 +2,18 @@
   margin-bottom: 0.85rem;
 }
 
+.voice-launch-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.voice-local-note {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
 .recording-panel {
   padding: 1rem;
   background: rgba(237, 106, 106, 0.055);
@@ -75,6 +87,11 @@
 }
 
 @media (max-width: 520px) {
+  .voice-launch-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .recording-controls {
     flex-direction: column;
   }

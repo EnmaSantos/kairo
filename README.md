@@ -1,8 +1,8 @@
 # Kairo
 
-A voice-first AI journal that transcribes spoken reflections, detects emotional patterns, and lets you have conversations with your journal history.
+A private, voice-first journal with a hosted history viewer and local-only AI.
 
-[Watch Demo](#demo) · [How the AI works](#how-the-ai-works) · [Run locally](#run-locally)
+[Watch Demo](#demo) · [How the AI works](#how-the-ai-works) · [Run locally](#run-locally) · [Release notes](RELEASE_NOTES.md)
 
 <p align="center">
   <img src="docs/images/auth-page.png" alt="Kairo sign-in screen" width="900" />
@@ -12,7 +12,7 @@ A voice-first AI journal that transcribes spoken reflections, detects emotional 
 
 - Record a reflection and get an automatic transcription (Whisper).
 - Detect emotions and surface patterns across your entries.
-- Ask natural-language questions about past entries (RAG + FAISS).
+- Ask natural-language questions about past entries (local retrieval + Gemma).
 
 ---
 
@@ -46,7 +46,7 @@ Kairo is built for quick capture and long-term reflection:
 | --- | --- |
 | Speak a thought | Transcribes audio with Distil-Whisper |
 | Save an entry | Classifies emotion (joy, sadness, anger, fear, …) |
-| Ask “When was I stressed about work?” | Retrieves similar past entries via embeddings + FAISS |
+| Ask “When was I stressed about work?” | Retrieves similar entries locally and answers with Gemma |
 | Want structure | Groups entries into notebooks (manual or auto-generated) |
 | Browse memory | Dashboard, timeline, calendar, map, and photo views |
 
@@ -112,35 +112,38 @@ The story recruiters should see without running anything:
 
 ## How the AI works
 
-Kairo is not “chat over a database dump.” Each reflection goes through a real local ML pipeline:
+Kairo now has two explicit runtimes:
 
 ```text
-Voice recording
-      ↓
-Audio preprocessing (librosa / FFmpeg → 16 kHz)
-      ↓
-Whisper transcription   (distil-whisper/distil-medium.en)
-      ↓
-Emotion classification  (j-hartmann/emotion-english-distilroberta-base)
-      ↓
-Text embeddings         (sentence-transformers all-MiniLM-L6-v2)
-      ↓
-FAISS semantic index    (IndexFlatL2, updated on each new entry)
-      ↓
-Context-aware chat      (top-k retrieval + optional emotion-aware ranking)
+Hosted or local browser
+        │
+        ├── HTTPS → Kairo Cloud API
+        │           Authentication, entries, notebooks, photos, sync
+        │           No PyTorch, MLX, model weights, or AI endpoints
+        │
+        └── loopback → Kairo Local AI (127.0.0.1:8001)
+                    Distil-Whisper transcription
+                    ModernBERT text emotions
+                    W2V-BERT vocal-emotion signal
+                    Qwen3 semantic retrieval
+                    Gemma 4 grounded journal answers
 ```
 
-### Why this pipeline matters
+Raw voice recordings go only to the loopback service. A saved voice entry
+synchronizes its transcript and derived labels, not the audio file. Typed
+entries still save if local analysis is unavailable.
 
 | Stage | Model / tool | Role |
 | --- | --- | --- |
-| Speech → text | Distil-Whisper medium EN | Fast English ASR; Apple Silicon MPS-friendly |
-| Emotion | DistilRoBERTa emotion | Labels entries for filters and pattern views |
-| Embeddings | MiniLM-L6 | 384-dim vectors for semantic similarity |
-| Retrieval | FAISS | Fast nearest-neighbor search over journal history |
-| Chat | Custom RAG endpoint | Question embedding → top candidates → emotion-aware re-rank → context for the answer |
+| Speech → text | Distil-Whisper Large v3.5 | Higher-accuracy English ASR on Apple MPS |
+| Text emotion | ModernBERT GoEmotions | 28 detailed emotions plus a compatible broad mood |
+| Vocal signal | W2V-BERT Emotion | Secondary, uncertainty-aware signal from speech |
+| Embeddings | Qwen3 Embedding 0.6B | 1024-dimensional, instruction-aware retrieval |
+| Journal answer | Gemma 4 E2B 4-bit | Local grounded response over retrieved entries |
 
-Auto-generated notebooks can also group entries by day / week / month / custom range from the library UI.
+The model manager keeps only one set of weights resident at a time. Entry
+vectors are cached in memory, but every retrieval request contains only the
+signed-in user's entries, eliminating the old cross-user global index.
 
 ---
 
@@ -149,12 +152,21 @@ Auto-generated notebooks can also group entries by day / week / month / custom r
 A few choices that shaped the project:
 
 - **Voice-first, not text-first.** The primary path is record → transcribe → save, so friction stays low when you only have a moment to speak.
-- **Emotion as a first-class field.** Sentiment is stored on every entry, used in filters, and can bias chat retrieval when the question itself has a non-neutral tone.
-- **Local RAG with FAISS.** Journal history is embedded and indexed so “questions about me” are grounded in *your* past writing, not a generic LLM hallucination over empty context.
+- **Emotion as a first-class field.** Kairo stores a broad mood for filters,
+  the detailed text-emotion label, top scores, and (for recordings) a separate
+  vocal signal.
+- **User-scoped local retrieval.** Journal history is embedded locally from the
+  signed-in user's entries so “questions about me” are grounded in that
+  person's writing without a shared vector index.
+- **Deployable viewer, local AI.** `main.py` has no ML imports. Hosted builds can
+  view and edit journal data while `local_ai.py` remains bound to loopback.
 - **SQLite by default.** One-command local demo without standing up Postgres; `DATABASE_URL` still allows PostgreSQL when you need it.
 - **Editorial React UI.** Dashboard, timeline, calendar, map, and photos treat memory as something you *browse*, not only a search box.
 
-**Honest limits (good for interviews):** models load on backend startup (cold start cost); summarization falls back to title heuristics if the summarizer is unavailable; chat returns retrieved context rather than a fully generative essay; the app is designed to run locally (not deployed as a public live demo yet).
+**Privacy boundary:** raw audio and inference stay local. Journal text, images,
+and locally derived labels are currently stored by the configured cloud API.
+End-to-end encryption of journal content is a separate future layer and is not
+claimed by this version.
 
 ---
 
@@ -164,9 +176,12 @@ A few choices that shaped the project:
 
 - **FastAPI** + **SQLAlchemy**
 - **SQLite** locally · PostgreSQL-compatible via `DATABASE_URL`
-- **Hugging Face Transformers** — Whisper ASR, emotion classification
-- **Sentence Transformers** + **FAISS** — embeddings and retrieval
-- **librosa** / **FFmpeg** — audio decode and resampling
+- Model-free cloud API in `main.py`
+- Authenticated loopback AI API in `local_ai.py`
+- **Transformers** — Whisper and emotion classification
+- **Sentence Transformers** — Qwen retrieval
+- **MLX** — Gemma generation on Apple silicon
+- **librosa** / **FFmpeg** — local audio decode and resampling
 - JWT auth, optional **Google OAuth**
 
 ### Frontend
@@ -185,21 +200,43 @@ A few choices that shaped the project:
 
 ### Requirements
 
-- Python 3.9+
+- Python 3.13
 - Node.js 20.19+ and npm
 - FFmpeg (for audio)
+- Apple silicon for the current Gemma MLX runtime
 - Optional: PostgreSQL if you prefer it over SQLite
 
-### 1. Backend dependencies
+### 1. Local dependencies
 
 ```bash
-python3 -m venv kairo-env
-source kairo-env/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+uv python install 3.13
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -r requirements-ai.txt
 ```
 
-### 2. Environment variables
+For a hosted API that never installs ML packages, install only
+`requirements.txt`.
+
+### 2. Download the free local models
+
+Download all five model groups (about 10 GB total):
+
+```bash
+./.venv/bin/python download_models.py
+```
+
+To download only selected capabilities:
+
+```bash
+./.venv/bin/python download_models.py transcription text-emotion
+```
+
+The default model directory is
+`~/Library/Application Support/Kairo/models` on macOS and
+`~/.cache/kairo/models` elsewhere. Set `KAIRO_MODELS_DIR` to use another
+location. The downloader is safe to rerun and resumes Hugging Face downloads.
+
+### 3. Environment variables
 
 Project root `.env` (see also `.env.example`):
 
@@ -215,8 +252,14 @@ Frontend `kairo-frontend/.env` (see `.env.example`):
 
 ```env
 VITE_API_URL=http://127.0.0.1:8000
+VITE_AI_MODE=disabled
+VITE_LOCAL_AI_URL=http://127.0.0.1:8001
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
+
+`start-kairo.sh` overrides `VITE_AI_MODE` for the local session and generates
+an ephemeral token shared only by the local browser build and loopback service.
+Do not put a local AI token in a hosted frontend build.
 
 ### Google sign-in (optional)
 
@@ -252,12 +295,12 @@ explicitly add); Google does not allow a wildcard origin for arbitrary forks.
 Set that same deployed UI origin in `CORS_ALLOWED_ORIGINS` in the backend `.env`
 so Kairo's API accepts its browser requests.
 
-### 3. Seed demo data
+### 4. Seed demo data
 
 To create the original disposable demo account and reset its sample database:
 
 ```bash
-source kairo-env/bin/activate
+source .venv/bin/activate
 rm -f kairo.db
 python seed_data.py
 ```
@@ -273,7 +316,7 @@ To safely add or refresh showcase content for an existing account without
 changing its password or deleting any of its data:
 
 ```bash
-./kairo-env/bin/python seed_showcase_data.py \
+./.venv/bin/python seed_showcase_data.py \
   --email enmanueldelossantos64@gmail.com
 ```
 
@@ -281,32 +324,67 @@ The showcase seed is limited to the local SQLite database, is disabled when
 `KAIRO_ENV=production`, reuses matching notebooks, and skips or refreshes its
 own deterministic entries when run again.
 
-### 4. Frontend dependencies
+### 5. Frontend dependencies
 
 ```bash
 cd kairo-frontend
 npm ci
 ```
 
-### 5. Start the app
+### 6. Start Kairo Local
 
-**API** (project root):
+The launcher starts all three processes: storage API, local AI companion, and
+the Vite UI.
 
 ```bash
-source kairo-env/bin/activate
+./start-kairo.sh
+```
+
+The local AI service is bound to `127.0.0.1`; it is not exposed to the LAN.
+
+### Manual startup
+
+**Cloud-safe API**:
+
+```bash
+source .venv/bin/activate
 uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-**UI** (`kairo-frontend`):
+**Local AI companion**:
+
+```bash
+export KAIRO_LOCAL_AI_TOKEN="$(openssl rand -hex 32)"
+export VITE_LOCAL_AI_TOKEN="$KAIRO_LOCAL_AI_TOKEN"
+export VITE_AI_MODE=local
+uvicorn local_ai:app --host 127.0.0.1 --port 8001
+```
+
+**UI** (`kairo-frontend`, inheriting the two `VITE_` variables):
 
 ```bash
 npm run dev
 ```
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
-- API: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- Storage API: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- Local AI: [http://127.0.0.1:8001](http://127.0.0.1:8001)
 
-> First backend boot downloads and loads ML models (Whisper, emotion, embeddings). That can take a bit; later starts are faster if models are cached.
+### Hosted viewer
+
+Deploy `main:app` with `requirements.txt`, a PostgreSQL `DATABASE_URL`, a strong
+`SECRET_KEY`, and the hosted UI origin in `CORS_ALLOWED_ORIGINS`. Build the
+frontend with:
+
+```env
+VITE_API_URL=https://your-api.example.com
+VITE_AI_MODE=disabled
+```
+
+The resulting site can authenticate, view, create, edit, organize, and sync
+entries. AI buttons explain that Kairo Local is required. Filesystem uploads
+are suitable for the local demo; a multi-instance deployment should replace
+them with object storage.
 
 ---
 
@@ -314,7 +392,11 @@ npm run dev
 
 | Path | Role |
 | --- | --- |
-| `main.py` | FastAPI app, transcription, emotion, RAG chat, notebooks |
+| `main.py` | Model-free storage/auth/notebook API |
+| `local_ai.py` | Authenticated loopback AI API |
+| `local_ai_models.py` | Lazy model manager and inference pipeline |
+| `download_models.py` | Repeatable free-model downloader |
+| `migrations.py` | Additive schema migration for local-AI metadata |
 | `models.py` | SQLAlchemy models |
 | `schemas.py` | Pydantic request/response schemas |
 | `auth.py` | JWT helpers |
@@ -330,16 +412,17 @@ npm run dev
 
 **Today**
 
-- Runs well as a local full-stack demo (not a public hosted product).
-- Chat is retrieval-first (context from past entries), not a full free-form LLM essay generator.
-- Screenshot gallery is incomplete; only sign-in is committed so far.
+- Hosted viewer and local AI are separated at the process and dependency level.
+- Chat is retrieval-grounded and generated locally by Gemma.
+- Raw audio remains on the device; synchronized journal text is not yet
+  end-to-end encrypted.
 
 **Next (high leverage for recruiters)**
 
 1. Add the 4–6 product screenshots listed above (`docs/images/`).
 2. Record and link a **60–90s** unlisted YouTube or Loom demo (voice path is the proof).
 3. Optional: thin public deploy or Docker compose for “clone and try.”
-4. Optional: short API reference for the main endpoints (`/transcribe-audio`, `/journal-entries`, `/chat`, notebooks).
+4. Add an end-to-end encrypted journal-content layer for hosted storage.
 
 ---
 
