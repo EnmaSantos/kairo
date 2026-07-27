@@ -124,9 +124,16 @@ app = FastAPI()
 # --- NEW: ADD CORS MIDDLEWARE ---
 # This must be right after app = FastAPI()
 
-origins = [
-    "http://localhost:3000",  # The address of your React app
-]
+default_origins = {
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+}
+configured_origins = {
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+}
+origins = sorted(default_origins | configured_origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -186,19 +193,27 @@ def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session =
 # --- NEW: GOOGLE AUTH ENDPOINT ---
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
+
+def google_oauth_is_configured() -> bool:
+    return bool(
+        GOOGLE_CLIENT_ID
+        and GOOGLE_CLIENT_ID != "placeholder-client-id"
+        and GOOGLE_CLIENT_ID.endswith(".apps.googleusercontent.com")
+    )
+
 @app.post("/auth/google", response_model=schemas.Token)
 def google_auth(auth_request: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
     """
     Verifies a Google ID token and logs in/registers the user.
     """
+    if not google_oauth_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in is not configured. Set GOOGLE_CLIENT_ID to a Google web client ID.",
+        )
+
     try:
-        # 1. Verify the token
-        # If you have the real client ID, pass it as the second argument.
-        # If using a placeholder in frontend, the token will have the REAL ID from frontend.
-        # For now, we'll try to verify without enforcing audience check if it's the placeholder,
-        # BUT google lib requires audience.
-        # We will assume the user will update GOOGLE_CLIENT_ID in main.py too.
-        
+        # Verify the token and require it to be issued for this web client.
         id_info = id_token.verify_oauth2_token(
             auth_request.token, 
             google_requests.Request(), 

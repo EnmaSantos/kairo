@@ -1,54 +1,110 @@
 :root {
-  /* --- Color Palette (Dark Theme) --- */
-  --bg-primary: #0D1117;
-  /* Deep dark blue/black */
-  --bg-secondary: #161B22;
-  /* Slightly lighter for cards/sidebar */
-  --bg-tertiary: #21262D;
-  /* Borders / Inputs */
+  color-scheme: dark;
 
-  --text-primary: #FFFFFF;
-  --text-secondary: #8B949E;
-  --text-muted: #6E7681;
+  /* Core palette — extended from the login experience */
+  --bg-primary: #0b1016;
+  --bg-secondary: #111821;
+  --bg-tertiary: #18222d;
+  --bg-elevated: #1c2733;
+  --bg-overlay: rgba(4, 8, 13, 0.78);
 
-  --accent-primary: #2F81F7;
-  /* Bright Blue */
-  --accent-hover: #58A6FF;
+  --text-primary: #f5f7fa;
+  --text-secondary: #a6b1bd;
+  --text-muted: #82909d;
+  --text-on-accent: #ffffff;
 
-  --border-color: #30363D;
+  --accent-primary: #2563eb;
+  --accent-hover: #5a99ff;
+  --accent-button-hover: #3474dd;
+  --accent-pressed: #2868ce;
+  --accent-soft: rgba(59, 130, 246, 0.13);
+  --accent-border: rgba(90, 153, 255, 0.38);
 
-  /* --- Semantic Colors --- */
-  --success: #238636;
-  --danger: #DA3633;
-  --warning: #D29922;
+  --border-color: #273341;
+  --border-strong: #354454;
+  --focus-ring: rgba(90, 153, 255, 0.44);
 
-  /* --- Typography --- */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  --font-serif: 'Merriweather', serif;
-  /* For journal entries */
+  --success: #4eb889;
+  --success-soft: rgba(78, 184, 137, 0.13);
+  --danger: #ed6a6a;
+  --danger-hover: #ff8181;
+  --danger-soft: rgba(237, 106, 106, 0.12);
+  --warning: #d8a84e;
+  --warning-soft: rgba(216, 168, 78, 0.14);
+  --purple: #a78bfa;
+  --purple-soft: rgba(167, 139, 250, 0.13);
+
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-round: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.36);
+
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  --sidebar-width: 272px;
+  --content-max: 1240px;
+  --ease: 160ms ease;
 }
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
-}
-
-/* --- Global Reset & Utilities --- */
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bg-primary);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 75% -10%, rgba(59, 130, 246, 0.08), transparent 32rem),
+    var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 a {
-  color: var(--accent-primary);
+  color: var(--accent-hover);
   text-decoration: none;
 }
 
@@ -61,31 +117,51 @@ h2,
 h3,
 h4,
 h5,
+h6,
+p {
+  margin-top: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
 h6 {
-  margin: 0;
-  font-weight: 600;
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
-button {
-  font-family: var(--font-sans);
+::selection {
+  background: rgba(59, 130, 246, 0.35);
 }
 
-/* --- Scrollbar --- */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
-  border-radius: 4px;
+  background: #2b3744;
+  border: 2px solid var(--bg-primary);
+  border-radius: var(--radius-round);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #3b4958;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

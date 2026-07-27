@@ -1,85 +1,67 @@
+import { Clock3 } from 'lucide-react';
 import type { JournalEntry } from '../types';
+import { formatEntryDay, formatSentiment, getEntryPresentation } from '../utils/entries';
+import { EmptyState } from './EmptyState';
+import { PageHeader } from './PageHeader';
 
 interface TimelineViewProps {
     entries: JournalEntry[];
+    showPageHeader?: boolean;
 }
 
-export function TimelineView({ entries }: TimelineViewProps) {
-    if (entries.length === 0) {
-        return <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>No entries yet.</p>;
-    }
+export function TimelineView({ entries, showPageHeader = false }: TimelineViewProps) {
+    const content = entries.length === 0 ? (
+        <EmptyState
+            title="Your timeline is waiting"
+            description="Entries will appear here in chronological order as your journal grows."
+            icon={<Clock3 />}
+        />
+    ) : (
+        <div className="timeline-list">
+            {entries.map((entry) => {
+                const presentation = getEntryPresentation(entry);
+                return (
+                    <article key={entry.id} className="timeline-item">
+                        <span className="timeline-dot" aria-hidden="true" />
+                        <div className="timeline-card surface-card">
+                            <div className="timeline-date">
+                                <time dateTime={entry.created_at}>{formatEntryDay(entry.created_at)}</time>
+                                <span>
+                                    {new Intl.DateTimeFormat(undefined, {
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                    }).format(new Date(entry.created_at))}
+                                </span>
+                            </div>
+                            <h3 className="entry-title">{presentation.title}</h3>
+                            {presentation.body && <p className="entry-preview">{presentation.body}</p>}
+                            {entry.image_url && (
+                                <img src={entry.image_url} alt="Entry attachment" className="entry-image" />
+                            )}
+                            {entry.sentiment && (
+                                <div className="entry-meta">
+                                    <span className={`sentiment-badge ${entry.sentiment.toLowerCase()}`}>
+                                        {formatSentiment(entry.sentiment)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </article>
+                );
+            })}
+        </div>
+    );
+
+    if (!showPageHeader) return content;
 
     return (
-        <div style={{ position: 'relative', maxWidth: '600px', margin: '0 auto', padding: '2rem 0' }}>
-            {/* Vertical Line */}
-            <div style={{
-                position: 'absolute',
-                left: '20px',
-                top: 0,
-                bottom: 0,
-                width: '2px',
-                background: 'var(--border-color)'
-            }}></div>
-
-            {entries.map((entry) => (
-                <div key={entry.id} style={{
-                    position: 'relative',
-                    paddingLeft: '50px',
-                    marginBottom: '2rem'
-                }}>
-                    {/* Dot */}
-                    <div style={{
-                        position: 'absolute',
-                        left: '11px',
-                        top: '0',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: 'var(--bg-primary)',
-                        border: '4px solid var(--accent-primary)',
-                        zIndex: 1
-                    }}></div>
-
-                    {/* Content */}
-                    <div style={{
-                        background: 'var(--bg-secondary)',
-                        padding: '1.5rem',
-                        borderRadius: '12px',
-                        border: '1px solid var(--border-color)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                            <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
-                                {new Date(entry.created_at).toLocaleDateString()}
-                            </span>
-                            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                                {new Date(entry.created_at).toLocaleTimeString()}
-                            </span>
-                        </div>
-                        <p style={{ margin: '0 0 1rem 0', lineHeight: '1.6' }}>{entry.text_content}</p>
-
-                        {entry.image_url && (
-                            <img
-                                src={entry.image_url}
-                                alt="Memory"
-                                style={{ width: '100%', borderRadius: '8px', marginBottom: '1rem' }}
-                            />
-                        )}
-
-                        {entry.sentiment && (
-                            <span style={{
-                                display: 'inline-block',
-                                padding: '4px 8px',
-                                borderRadius: '12px',
-                                background: 'var(--bg-tertiary)',
-                                fontSize: '0.8rem',
-                                color: 'var(--text-secondary)'
-                            }}>
-                                #{entry.sentiment}
-                            </span>
-                        )}
-                    </div>
-                </div>
-            ))}
+        <div className="standalone-view">
+            <PageHeader
+                eyebrow="Chronology"
+                title="Timeline"
+                description="See how your thoughts, projects, and routines have evolved over time."
+            />
+            {content}
         </div>
     );
 }

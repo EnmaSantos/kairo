@@ -1,3 +1,4 @@
+import { BookMarked, Trash2 } from 'lucide-react';
 import './NotebookCard.css';
 import type { Notebook } from '../types';
 
@@ -8,29 +9,23 @@ interface NotebookCardProps {
 }
 
 export function NotebookCard({ notebook, onClick, onDelete }: NotebookCardProps) {
-    // Random emoji if none provided (or use a fixed one based on title hash)
-    const emojis = ['📓', '🧠', '⚡', '💡', '📋', '🧑‍💻', '🤔'];
-    const emoji = emojis[notebook.id % emojis.length];
-
-    // Format date
-    const date = new Date(notebook.created_at).toLocaleDateString('en-US', {
+    const date = new Intl.DateTimeFormat(undefined, {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
-    });
+        year: 'numeric',
+    }).format(new Date(notebook.created_at));
 
     return (
         <article className="notebook-card">
             <div className="card-header">
-                <span className="card-icon">{emoji}</span>
+                <span className="notebook-symbol"><BookMarked aria-hidden="true" /></span>
                 <button
-                    className="card-menu-btn"
+                    type="button"
+                    className="icon-button notebook-delete-button"
                     aria-label={`Delete ${notebook.title}`}
-                    onClick={(e) => {
-                        onDelete(notebook.id);
-                    }}
+                    onClick={() => onDelete(notebook.id)}
                 >
-                    ⋮
+                    <Trash2 aria-hidden="true" />
                 </button>
             </div>
             <button
@@ -38,10 +33,10 @@ export function NotebookCard({ notebook, onClick, onDelete }: NotebookCardProps)
                 className="notebook-open-button"
                 onClick={() => onClick(notebook.id)}
             >
-                <div className="card-body">
-                    <h3 className="card-title">{notebook.title}</h3>
-                    <p className="card-meta">{date} • {notebook.entries.length} entries</p>
-                </div>
+                <span className="card-title">{notebook.title}</span>
+                <span className="card-meta">
+                    {notebook.entries.length} {notebook.entries.length === 1 ? 'entry' : 'entries'} · Created {date}
+                </span>
             </button>
         </article>
     );

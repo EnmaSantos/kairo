@@ -5,7 +5,12 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 
 import { App } from './App';
 
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? 'google-oauth-not-configured';
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+const googleOAuthEnabled = Boolean(
+  clientId
+  && clientId !== 'placeholder-client-id'
+  && clientId.endsWith('.apps.googleusercontent.com'),
+);
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
@@ -15,8 +20,12 @@ if (!rootElement) {
 const root = createRoot(rootElement);
 root.render(
   <StrictMode>
-    <GoogleOAuthProvider clientId={clientId}>
-      <App />
-    </GoogleOAuthProvider>
+    {googleOAuthEnabled && clientId ? (
+      <GoogleOAuthProvider clientId={clientId}>
+        <App googleOAuthEnabled />
+      </GoogleOAuthProvider>
+    ) : (
+      <App googleOAuthEnabled={false} />
+    )}
   </StrictMode>
 );

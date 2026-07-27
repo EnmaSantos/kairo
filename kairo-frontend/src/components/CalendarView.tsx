@@ -1,81 +1,110 @@
 import { useState } from 'react';
+import { CalendarDays } from 'lucide-react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import './CalendarView.css'; // We'll create this for custom styling
+import './CalendarView.css';
 import type { JournalEntry } from '../types';
+import { formatSentiment, getEntryPresentation } from '../utils/entries';
+import { EmptyState } from './EmptyState';
+import { PageHeader } from './PageHeader';
 
 interface CalendarViewProps {
     entries: JournalEntry[];
+    showPageHeader?: boolean;
 }
 
-export function CalendarView({ entries }: CalendarViewProps) {
+function isSameDay(left: Date, right: Date): boolean {
+    return left.getDate() === right.getDate()
+        && left.getMonth() === right.getMonth()
+        && left.getFullYear() === right.getFullYear();
+}
+
+export function CalendarView({ entries, showPageHeader = false }: CalendarViewProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
 
-    // Helper to check if a date has entries
-    const hasEntries = (date: Date): boolean => {
-        return entries.some(entry => {
-            const entryDate = new Date(entry.created_at);
-            return (
-                entryDate.getDate() === date.getDate() &&
-                entryDate.getMonth() === date.getMonth() &&
-                entryDate.getFullYear() === date.getFullYear()
-            );
-        });
-    };
+    const hasEntries = (date: Date): boolean => (
+        entries.some((entry) => isSameDay(new Date(entry.created_at), date))
+    );
 
-    // Get entries for the selected date
-    const selectedEntries = entries.filter(entry => {
-        const entryDate = new Date(entry.created_at);
-        return (
-            entryDate.getDate() === selectedDate.getDate() &&
-            entryDate.getMonth() === selectedDate.getMonth() &&
-            entryDate.getFullYear() === selectedDate.getFullYear()
-        );
-    });
+    const selectedEntries = entries.filter((entry) => (
+        isSameDay(new Date(entry.created_at), selectedDate)
+    ));
 
-    return (
-        <div className="calendar-view-container" style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1', minWidth: '300px' }}>
-                <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    <Calendar
-                        onChange={(value) => {
-                            if (value instanceof Date) {
-                                setSelectedDate(value);
-                            }
-                        }}
-                        value={selectedDate}
-                        tileClassName={({ date, view }) => {
-                            if (view === 'month' && hasEntries(date)) {
-                                return 'has-entries';
-                            }
-                        }}
-                    />
-                </div>
+    const content = entries.length === 0 ? (
+        <EmptyState
+            title="No journal dates yet"
+            description="Days with entries will be marked here once you begin writing."
+            icon={<CalendarDays />}
+        />
+    ) : (
+        <div className="calendar-view-container">
+            <div className="calendar-panel surface-card">
+                <Calendar
+                    onChange={(value) => {
+                        if (value instanceof Date) setSelectedDate(value);
+                    }}
+                    value={selectedDate}
+                    tileClassName={({ date, view }) => (
+                        view === 'month' && hasEntries(date) ? 'has-entries' : undefined
+                    )}
+                />
             </div>
 
-            <div style={{ flex: '1', minWidth: '300px' }}>
-                <h3 style={{ marginBottom: '1rem' }}>Entries for {selectedDate.toLocaleDateString()}</h3>
+            <section className="calendar-day-panel surface-card">
+                <h2>
+                    {new Intl.DateTimeFormat(undefined, {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                    }).format(selectedDate)}
+                </h2>
                 {selectedEntries.length === 0 ? (
-                    <p style={{ color: 'var(--text-secondary)' }}>No entries for this day.</p>
+                    <EmptyState
+                        compact
+                        title="Nothing recorded this day"
+                        description="Choose a marked date to revisit its entries."
+                        icon={<CalendarDays />}
+                    />
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {selectedEntries.map(entry => (
-                            <div key={entry.id} style={{
-                                background: 'var(--bg-secondary)',
-                                padding: '1rem',
-                                borderRadius: '8px',
-                                border: '1px solid var(--border-color)'
-                            }}>
-                                <p style={{ margin: 0 }}>{entry.text_content}</p>
-                                <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                    {new Date(entry.created_at).toLocaleTimeString()}
-                                    {entry.sentiment && <span style={{ marginLeft: '10px' }}>#{entry.sentiment}</span>}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="calendar-entry-list">
+                        {selectedEntries.map((entry) => {
+                            const presentation = getEntryPresentation(entry);
+                            return (
+                                <article key={entry.id} className="calendar-entry">
+                                    <h3>{presentation.title}</h3>
+                                    {presentation.body && <p>{presentation.body}</p>}
+                                    <div className="calendar-entry-meta">
+                                        <time dateTime={entry.created_at}>
+                                            {new Intl.DateTimeFormat(undefined, {
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                            }).format(new Date(entry.created_at))}
+                                        </time>
+                                        {entry.sentiment && (
+                                            <span className={`sentiment-badge ${entry.sentiment.toLowerCase()}`}>
+                                                {formatSentiment(entry.sentiment)}
+                                            </span>
+                                        )}
+                                    </div>
+                                </article>
+                            );
+                        })}
                     </div>
                 )}
-            </div>
+            </section>
+        </div>
+    );
+
+    if (!showPageHeader) return content;
+
+    return (
+        <div className="standalone-view">
+            <PageHeader
+                eyebrow="Daily rhythm"
+                title="Calendar"
+                description="Browse your journal by day and revisit the moments that shaped each week."
+            />
+            {content}
         </div>
     );
 }

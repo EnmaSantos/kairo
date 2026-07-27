@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { AlertCircle, Camera, CheckCircle2, Pencil, Save, Shuffle, X } from 'lucide-react';
 import api from '../api';
 import type { User, UserUpdate } from '../types';
 import { getApiErrorDetail } from '../utils/errors';
 import { convertHeicToJpeg, isHeicImage } from '../utils/images';
-import { NeoButton } from './NeoButton';
+import { Button } from './Button';
+import { PageHeader } from './PageHeader';
 
 interface SettingsProps {
     user: User;
@@ -28,7 +30,7 @@ export function Settings({ user, onUpdateUser }: SettingsProps) {
         full_name: '',
         username: '',
         email: '',
-        password: ''
+        password: '',
     });
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -39,280 +41,267 @@ export function Settings({ user, onUpdateUser }: SettingsProps) {
             full_name: user.full_name || '',
             username: user.username,
             email: user.email,
-            password: ''
+            password: '',
         });
     }, [user]);
 
-    const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+    const getToken = (): string => {
+        const activeToken = window.localStorage.getItem('kairo_token');
+        if (!activeToken) throw new Error('Your session has expired.');
+        return activeToken;
     };
 
-    const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-        e.preventDefault();
-        setIsLoading(true);
+    const resetForm = (): void => {
+        setFormData({
+            full_name: user.full_name || '',
+            username: user.username,
+            email: user.email,
+            password: '',
+        });
+        setIsEditing(false);
         setMessage(null);
+    };
 
-        // Only send fields that have values (except password which is optional)
+    const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
+        setFormData((current) => ({ ...current, [event.target.name]: event.target.value }));
+    };
+
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+        event.preventDefault();
+        if (isLoading) return;
+
         const updateData: UserUpdate = {};
-        if (formData.full_name !== user.full_name) updateData.full_name = formData.full_name;
-        if (formData.username !== user.username) updateData.username = formData.username;
-        if (formData.email !== user.email) updateData.email = formData.email;
+        if (formData.full_name !== (user.full_name || '')) updateData.full_name = formData.full_name.trim();
+        if (formData.username !== user.username) updateData.username = formData.username.trim();
+        if (formData.email !== user.email) updateData.email = formData.email.trim();
         if (formData.password) updateData.password = formData.password;
 
         if (Object.keys(updateData).length === 0) {
-            setIsLoading(false);
             setIsEditing(false);
             return;
         }
 
+        setIsLoading(true);
+        setMessage(null);
         try {
-            const token = window.localStorage.getItem('kairo_token');
-            if (!token) {
-                throw new Error('Your session has expired.');
-            }
-            const updatedUser = await api.updateUser(token, updateData);
+            const updatedUser = await api.updateUser(getToken(), updateData);
             onUpdateUser(updatedUser);
-            setMessage({ type: 'success', text: 'Profile updated successfully!' });
+            setMessage({ type: 'success', text: 'Your profile has been updated.' });
             setIsEditing(false);
-            setFormData(prev => ({ ...prev, password: '' })); // Clear password
-        } catch (err) {
-            console.error('Failed to update profile:', err);
-            setMessage({ type: 'error', text: getApiErrorDetail(err, 'Failed to update profile.') });
+            setFormData((current) => ({ ...current, password: '' }));
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+            setMessage({ type: 'error', text: getApiErrorDetail(error, 'Your profile could not be updated.') });
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleGenerateAvatar = async (): Promise<void> => {
+        if (isLoading) return;
         setIsLoading(true);
+        setMessage(null);
         try {
-            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-            const seed = `${user.username}${randomSuffix}`;
-            const newAvatarUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}`;
-
-            const token = window.localStorage.getItem('kairo_token');
-            if (!token) {
-                throw new Error('Your session has expired.');
-            }
-            const updatedUser = await api.updateUser(token, { profile_picture_url: newAvatarUrl });
-
+            const seed = `${user.username}-${Math.floor(1000 + Math.random() * 9000)}`;
+            const profilePictureUrl = `https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}`;
+            const updatedUser = await api.updateUser(getToken(), { profile_picture_url: profilePictureUrl });
             onUpdateUser(updatedUser);
-            setMessage({ type: 'success', text: 'New avatar generated!' });
-        } catch (err) {
-            console.error('Failed to generate avatar:', err);
-            setMessage({ type: 'error', text: 'Failed to generate avatar.' });
+            setMessage({ type: 'success', text: 'A new avatar has been generated.' });
+        } catch (error) {
+            console.error('Failed to generate avatar:', error);
+            setMessage({ type: 'error', text: 'A new avatar could not be generated.' });
         } finally {
             setIsLoading(false);
         }
     };
 
+    const handleAvatarUpload = async (file: File): Promise<void> => {
+        if (isLoading) return;
+        setIsLoading(true);
+        setMessage(null);
+        try {
+            const convertedFile = isHeicImage(file) ? await convertHeicToJpeg(file) : file;
+            const upload = await api.uploadImage(getToken(), convertedFile);
+            const updatedUser = await api.updateUser(getToken(), { profile_picture_url: upload.url });
+            onUpdateUser(updatedUser);
+            setMessage({ type: 'success', text: 'Your profile photo has been updated.' });
+        } catch (error) {
+            console.error('Avatar upload failed:', error);
+            setMessage({ type: 'error', text: 'Your profile photo could not be uploaded.' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const displayName = user.full_name?.trim() || user.username;
+    const avatarUrl = user.profile_picture_url
+        || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+
     return (
-        <div className="settings-view" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <h1 style={{ marginBottom: '2rem', fontSize: '2rem' }}>Account Settings</h1>
+        <div className="settings-view">
+            <div className="settings-shell">
+                <PageHeader
+                    eyebrow="Account"
+                    title="Profile settings"
+                    description="Keep your personal details and journal identity up to date."
+                />
 
-            <div className="settings-card" style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '2rem', border: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', gap: '2rem', flexDirection: 'column' }}>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                        <div style={{ position: 'relative' }}>
-                            <img
-                                src={user?.profile_picture_url || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"}
-                                alt="Profile"
-                                style={{ width: '100px', height: '100px', borderRadius: '50%', border: '4px solid var(--accent-primary)', background: 'var(--bg-tertiary)' }}
-                            />
+                <section className="settings-card surface-card">
+                    <div className="profile-summary">
+                        <div className="profile-avatar-wrap">
+                            <img src={avatarUrl} alt={`${displayName}'s profile`} className="profile-avatar" />
                             {isEditing && (
-                                <>
+                                <div className="profile-avatar-actions">
                                     <input
                                         type="file"
                                         id="avatar-upload"
-                                        style={{ display: 'none' }}
+                                        className="sr-only"
                                         accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
-                                        onChange={async (e) => {
-                                            let file = e.target.files?.[0];
-                                            if (!file) return;
-
-                                            setIsLoading(true);
-                                            try {
-                                                if (isHeicImage(file)) {
-                                                    file = await convertHeicToJpeg(file);
-                                                }
-
-                                                const token = window.localStorage.getItem('kairo_token');
-                                                if (!token) {
-                                                    throw new Error('Your session has expired.');
-                                                }
-                                                const uploadRes = await api.uploadImage(token, file);
-                                                const updatedUser = await api.updateUser(token, { profile_picture_url: uploadRes.url });
-                                                onUpdateUser(updatedUser);
-                                                setMessage({ type: 'success', text: 'Avatar updated!' });
-                                            } catch (err) {
-                                                console.error('Avatar upload failed:', err);
-                                                setMessage({ type: 'error', text: 'Failed to upload avatar.' });
-                                            } finally {
-                                                setIsLoading(false);
-                                            }
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            if (file) void handleAvatarUpload(file);
+                                            event.target.value = '';
                                         }}
                                     />
-                                    <div style={{ position: 'absolute', bottom: 0, right: 0, display: 'flex', gap: '5px' }}>
-                                        <button
-                                            onClick={() => document.getElementById('avatar-upload')?.click()}
-                                            type="button"
-                                            title="Upload Photo"
-                                            style={{
-                                                background: 'var(--bg-secondary)',
-                                                color: 'var(--text-primary)',
-                                                border: '1px solid var(--border-color)',
-                                                borderRadius: '50%',
-                                                width: '32px',
-                                                height: '32px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '1.2rem'
-                                            }}
-                                        >
-                                            📷
-                                        </button>
-                                        <button
-                                            onClick={handleGenerateAvatar}
-                                            type="button"
-                                            title="Generate New Random Avatar"
-                                            style={{
-                                                background: 'var(--accent-primary)',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '50%',
-                                                width: '32px',
-                                                height: '32px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '1.2rem'
-                                            }}
-                                        >
-                                            🎲
-                                        </button>
-                                    </div>
-                                </>
+                                    <button
+                                        type="button"
+                                        className="icon-button"
+                                        aria-label="Upload profile photo"
+                                        title="Upload profile photo"
+                                        disabled={isLoading}
+                                        onClick={() => document.getElementById('avatar-upload')?.click()}
+                                    >
+                                        <Camera aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="icon-button"
+                                        aria-label="Generate a new avatar"
+                                        title="Generate a new avatar"
+                                        disabled={isLoading}
+                                        onClick={() => void handleGenerateAvatar()}
+                                    >
+                                        <Shuffle aria-hidden="true" />
+                                    </button>
+                                </div>
                             )}
                         </div>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{user?.full_name}</h2>
-                            <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0 0' }}>@{user?.username}</p>
+                        <div className="profile-copy">
+                            <h2>{displayName}</h2>
+                            <p>@{user.username}</p>
                         </div>
-                        <div style={{ marginLeft: 'auto' }}>
-                            {!isEditing && (
-                                <NeoButton text="Edit Profile" onClick={() => setIsEditing(true)} color="#2F81F7" />
-                            )}
-                        </div>
+                        {!isEditing && (
+                            <Button icon={<Pencil aria-hidden="true" />} onClick={() => {
+                                setIsEditing(true);
+                                setMessage(null);
+                            }}>
+                                Edit profile
+                            </Button>
+                        )}
                     </div>
 
-                    <hr style={{ borderColor: 'var(--border-color)', margin: 0 }} />
-
                     {message && (
-                        <div style={{
-                            padding: '10px',
-                            borderRadius: '6px',
-                            background: message.type === 'success' ? 'rgba(35, 134, 54, 0.2)' : 'rgba(218, 54, 51, 0.2)',
-                            color: message.type === 'success' ? '#238636' : '#DA3633',
-                            textAlign: 'center'
-                        }}>
-                            {message.text}
+                        <div
+                            className={`form-message form-message-${message.type}`}
+                            role={message.type === 'error' ? 'alert' : 'status'}
+                        >
+                            {message.type === 'success'
+                                ? <CheckCircle2 aria-hidden="true" />
+                                : <AlertCircle aria-hidden="true" />}
+                            <span>{message.text}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit}>
-                        <div style={{ display: 'grid', gap: '1.5rem' }}>
-                            <div>
-                                <label className="form-label">Full Name</label>
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        name="full_name"
-                                        className="neo-input"
-                                        value={formData.full_name}
-                                        onChange={handleChange}
-                                    />
-                                ) : (
-                                    <div style={{ fontSize: '1.1rem', padding: '0.75rem 0' }}>{user?.full_name}</div>
-                                )}
-                            </div>
+                    <form onSubmit={handleSubmit} className="settings-form">
+                        <div className="settings-field">
+                            <label className="form-label" htmlFor="settings-full-name">Full name</label>
+                            {isEditing ? (
+                                <input
+                                    id="settings-full-name"
+                                    type="text"
+                                    name="full_name"
+                                    className="neo-input"
+                                    autoComplete="name"
+                                    value={formData.full_name}
+                                    onChange={handleChange}
+                                />
+                            ) : (
+                                <div className="settings-value">{user.full_name || 'Not set'}</div>
+                            )}
+                        </div>
 
-                            <div>
-                                <label className="form-label">Username</label>
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        name="username"
-                                        className="neo-input"
-                                        value={formData.username}
-                                        onChange={handleChange}
-                                    />
-                                ) : (
-                                    <div style={{ fontSize: '1.1rem', padding: '0.75rem 0' }}>@{user?.username}</div>
-                                )}
-                            </div>
+                        <div className="settings-field">
+                            <label className="form-label" htmlFor="settings-username">Username</label>
+                            {isEditing ? (
+                                <input
+                                    id="settings-username"
+                                    type="text"
+                                    name="username"
+                                    className="neo-input"
+                                    autoComplete="username"
+                                    value={formData.username}
+                                    onChange={handleChange}
+                                    required
+                                />
+                            ) : (
+                                <div className="settings-value">@{user.username}</div>
+                            )}
+                        </div>
 
-                            <div>
-                                <label className="form-label">Email Address</label>
-                                {isEditing ? (
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        className="neo-input"
-                                        value={formData.email}
-                                        onChange={handleChange}
-                                    />
-                                ) : (
-                                    <div style={{ fontSize: '1.1rem', padding: '0.75rem 0' }}>{user?.email}</div>
-                                )}
-                            </div>
+                        <div className="settings-field">
+                            <label className="form-label" htmlFor="settings-email">Email address</label>
+                            {isEditing ? (
+                                <input
+                                    id="settings-email"
+                                    type="email"
+                                    name="email"
+                                    className="neo-input"
+                                    autoComplete="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                    required
+                                />
+                            ) : (
+                                <div className="settings-value">{user.email}</div>
+                            )}
+                        </div>
 
-                            {isEditing && (
+                        {isEditing && (
+                            <div className="settings-field">
+                                <label className="form-label" htmlFor="settings-password">New password</label>
                                 <div>
-                                    <label className="form-label">New Password (Optional)</label>
                                     <input
+                                        id="settings-password"
                                         type="password"
                                         name="password"
                                         className="neo-input"
-                                        placeholder="Leave blank to keep current password"
+                                        placeholder="Leave blank to keep your current password"
+                                        autoComplete="new-password"
                                         value={formData.password}
                                         onChange={handleChange}
                                     />
+                                    <p className="form-hint">Only enter a value if you want to change your password.</p>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {isEditing && (
-                                <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
-                                    <NeoButton
-                                        text={isLoading ? "Saving..." : "Save Changes"}
-                                        color="#238636"
-                                        type="submit"
-                                        style={{ flex: 1 }}
-                                    />
-                                    <NeoButton
-                                        text="Cancel"
-                                        color="#6E7681"
-                                        onClick={() => {
-                                            setIsEditing(false);
-                                            setMessage(null);
-                                            // Reset form
-                                            setFormData({
-                                                full_name: user.full_name || '',
-                                                username: user.username || '',
-                                                email: user.email || '',
-                                                password: ''
-                                            });
-                                        }}
-                                        style={{ flex: 1 }}
-                                    />
-                                </div>
-                            )}
-                        </div>
+                        {isEditing && (
+                            <div className="settings-actions">
+                                <Button type="button" icon={<X aria-hidden="true" />} onClick={resetForm}>
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    variant="primary"
+                                    icon={<Save aria-hidden="true" />}
+                                    isLoading={isLoading}
+                                >
+                                    Save changes
+                                </Button>
+                            </div>
+                        )}
                     </form>
-                </div>
+                </section>
             </div>
         </div>
     );

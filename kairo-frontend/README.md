@@ -14,10 +14,17 @@ Copy `.env.example` to `.env` and configure the client:
 
 ```env
 VITE_API_URL=http://127.0.0.1:8000
-VITE_GOOGLE_CLIENT_ID=placeholder-client-id
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
 `VITE_API_URL` is optional and defaults to the local FastAPI address.
+
+For Google sign-in, use a Google OAuth **Web application** client and add both
+`http://localhost:3000` and `http://127.0.0.1:3000` as authorized JavaScript
+origins. Its client ID must exactly match `GOOGLE_CLIENT_ID` in the project-root
+`.env`. Client IDs are public identifiers, so the project can commit the same
+value in both `.env.example` files for local clones; never commit a client
+secret.
 
 ## Commands
 

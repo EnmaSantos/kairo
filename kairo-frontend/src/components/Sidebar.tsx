@@ -1,4 +1,19 @@
+import type { LucideIcon } from 'lucide-react';
+import {
+    BookOpenText,
+    CalendarDays,
+    Clock3,
+    FilePlus2,
+    Images,
+    LayoutDashboard,
+    LibraryBig,
+    LogOut,
+    MapPinned,
+    Settings,
+    X,
+} from 'lucide-react';
 import type { AppView, User } from '../types';
+import { Button } from './Button';
 
 interface SidebarProps {
     currentView: AppView;
@@ -12,30 +27,46 @@ interface SidebarProps {
 interface NavigationItem {
     id: AppView;
     label: string;
-    icon: string;
+    icon: LucideIcon;
 }
 
+const overviewItems: NavigationItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'timeline', label: 'Timeline', icon: Clock3 },
+    { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+    { id: 'photos', label: 'Photos', icon: Images },
+    { id: 'map', label: 'Map', icon: MapPinned },
+];
+
 export function Sidebar({ currentView, onChangeView, onLogout, user, isOpen, onClose }: SidebarProps) {
-    const navItems: NavigationItem[] = [
-        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { id: 'timeline', label: 'Timeline', icon: '🕒' },
-        { id: 'calendar', label: 'Calendar', icon: '📅' },
-        { id: 'photos', label: 'Photos', icon: '🖼️' },
-        { id: 'map', label: 'Map', icon: '📍' },
-    ];
-
-    const journals: NavigationItem[] = [
-        { id: 'library', label: 'All Journals', icon: '📚' },
-    ];
-
     const handleNavClick = (viewId: AppView): void => {
         onChangeView(viewId);
         onClose();
     };
 
+    const renderNavigationItem = (item: NavigationItem) => {
+        const Icon = item.icon;
+        const isActive = currentView === item.id;
+        return (
+            <button
+                type="button"
+                key={item.id}
+                className={`nav-item ${isActive ? 'active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => handleNavClick(item.id)}
+            >
+                <span className="nav-icon"><Icon aria-hidden="true" /></span>
+                <span>{item.label}</span>
+            </button>
+        );
+    };
+
+    const displayName = user?.full_name?.trim() || user?.username || 'My journal';
+    const avatarUrl = user?.profile_picture_url
+        || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+
     return (
         <>
-            {/* Mobile Overlay */}
             {isOpen && (
                 <button
                     type="button"
@@ -45,69 +76,68 @@ export function Sidebar({ currentView, onChangeView, onLogout, user, isOpen, onC
                 />
             )}
 
-            <div className={`sidebar ${isOpen ? 'open' : ''}`}>
+            <aside className={`sidebar ${isOpen ? 'open' : ''}`} aria-label="Primary navigation">
                 <div className="sidebar-header">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <img src="/logo192.png" alt="Kairo Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
-                        <div className="app-name">Kairo</div>
+                    <div className="sidebar-brand">
+                        <span className="brand-mark"><BookOpenText aria-hidden="true" /></span>
+                        <span className="app-name">Kairo</span>
                     </div>
-                    <button className="close-sidebar-btn" aria-label="Close navigation" onClick={onClose}>×</button>
-                </div>
-
-                <div className="nav-section">
                     <button
                         type="button"
-                        className="nav-item active"
-                        style={{ marginBottom: '1rem', backgroundColor: 'var(--accent-primary)', color: 'white', cursor: 'pointer' }}
-                        onClick={() => handleNavClick('journal')}
+                        className="icon-button close-sidebar-btn"
+                        aria-label="Close navigation"
+                        onClick={onClose}
                     >
-                        <span className="nav-icon">✏️</span>
-                        <span style={{ fontWeight: 600 }}>New Entry</span>
+                        <X aria-hidden="true" />
                     </button>
                 </div>
 
-                <div className="nav-section">
-                    <div className="nav-label">Overview</div>
-                    {navItems.map(item => (
-                        <button
-                            type="button"
-                            key={item.id}
-                            className={`nav-item ${currentView === item.id ? 'active' : ''}`}
-                            onClick={() => handleNavClick(item.id)}
-                        >
-                            <span className="nav-icon">{item.icon}</span>
-                            {item.label}
-                        </button>
-                    ))}
-                </div>
+                <Button
+                    variant="primary"
+                    className="new-entry-button"
+                    icon={<FilePlus2 aria-hidden="true" />}
+                    onClick={() => handleNavClick('journal')}
+                >
+                    New entry
+                </Button>
 
-                <div className="nav-section">
-                    <div className="nav-label">Journals</div>
-                    {journals.map(item => (
-                        <button
-                            type="button"
-                            key={item.id}
-                            className={`nav-item ${currentView === item.id ? 'active' : ''}`}
-                            onClick={() => handleNavClick(item.id)}
-                        >
-                            <span className="nav-icon">{item.icon}</span>
-                            {item.label}
-                        </button>
-                    ))}
-                </div>
+                <nav>
+                    <div className="nav-section">
+                        <div className="nav-label">Overview</div>
+                        {overviewItems.map(renderNavigationItem)}
+                    </div>
+
+                    <div className="nav-section">
+                        <div className="nav-label">Journal</div>
+                        {renderNavigationItem({ id: 'library', label: 'Notebooks', icon: LibraryBig })}
+                    </div>
+                </nav>
 
                 <div className="sidebar-footer">
-                    <button type="button" className="user-profile-mini" onClick={() => handleNavClick('settings')} title="Go to Settings">
-                        <img src={user?.profile_picture_url || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"} alt="User" className="avatar" />
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>My Journal</div>
-                        </div>
+                    <button
+                        type="button"
+                        className="user-profile-mini"
+                        onClick={() => handleNavClick('settings')}
+                        aria-current={currentView === 'settings' ? 'page' : undefined}
+                    >
+                        <img src={avatarUrl} alt="" className="avatar" />
+                        <span className="user-profile-copy">
+                            <span className="user-profile-name">{displayName}</span>
+                            <span className="user-profile-email">{user?.email || 'Account settings'}</span>
+                        </span>
+                        <Settings size={16} aria-hidden="true" />
                     </button>
-                    <div style={{ marginTop: '10px', textAlign: 'center' }}>
-                        <button onClick={onLogout} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.8rem' }}>Log Out</button>
-                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="sidebar-logout"
+                        icon={<LogOut aria-hidden="true" />}
+                        onClick={onLogout}
+                    >
+                        Log out
+                    </Button>
                 </div>
-            </div>
+            </aside>
         </>
     );
 }

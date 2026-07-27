@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
+import { AlertCircle, BookOpenText, LogIn, UserPlus } from 'lucide-react';
 import api from '../api';
 import { getApiErrorDetail } from '../utils/errors';
+import { Button } from './Button';
 
 interface AuthProps {
     onLogin: (token: string) => void;
+    googleOAuthEnabled: boolean;
 }
 
-export function Auth({ onLogin }: AuthProps) {
+export function Auth({ onLogin, googleOAuthEnabled }: AuthProps) {
     const [isRegistering, setIsRegistering] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -18,112 +21,134 @@ export function Auth({ onLogin }: AuthProps) {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-        e.preventDefault();
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+        event.preventDefault();
+        if (isLoading) return;
+
         setError('');
         setIsLoading(true);
 
         try {
             if (isRegistering) {
                 if (password !== confirmPassword) {
-                    setError("Passwords don't match!");
-                    setIsLoading(false);
+                    setError("Your passwords don't match. Please try again.");
                     return;
                 }
                 await api.register(email, password, username, fullName);
-                // Auto login after register
-                const data = await api.login(email, password);
-                onLogin(data.access_token);
-            } else {
-                const data = await api.login(email, password);
-                onLogin(data.access_token);
             }
+
+            const data = await api.login(email, password);
+            onLogin(data.access_token);
         } catch (err) {
-            console.error('Auth failed:', err);
-            setError(isRegistering
-                ? 'Registration failed. Username or Email might be taken.'
-                : 'Login failed. Please check your credentials.');
+            console.error('Authentication failed:', err);
+            const fallback = isRegistering
+                ? 'We could not create that account. The email or username may already be in use.'
+                : 'We could not sign you in. Check your email and password, then try again.';
+            setError(getApiErrorDetail(err, fallback));
         } finally {
             setIsLoading(false);
         }
     };
 
+    const toggleMode = (): void => {
+        setIsRegistering((current) => !current);
+        setError('');
+        setConfirmPassword('');
+    };
+
     return (
         <div className="auth-wrapper">
-            {/* Left Side - Image & Quote */}
-            <div className="auth-left">
+            <div className="auth-left" aria-hidden="true">
                 <div className="auth-quote">
-                    <h2>"Fill your paper with the breathings of your heart."</h2>
+                    <h2>“Fill your paper with the breathings of your heart.”</h2>
                     <p>— William Wordsworth</p>
                 </div>
             </div>
 
-            {/* Right Side - Form */}
-            <div className="auth-right">
+            <main className="auth-right">
                 <div className="auth-box">
+                    <div className="auth-brand">
+                        <span className="brand-mark"><BookOpenText aria-hidden="true" /></span>
+                        <span className="auth-brand-name">Kairo</span>
+                    </div>
+
                     <div className="auth-header">
-                        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem', fontFamily: 'var(--font-heading)', color: 'var(--accent-primary)' }}>Kairo</h1>
-                        <h2 style={{ fontSize: '1.5rem', marginTop: 0 }}>{isRegistering ? 'Create your account' : 'Welcome back'}</h2>
-                        <p>{isRegistering ? 'Join Kairo and start your journaling journey today.' : 'Ready to write? Log in to continue your journey.'}</p>
+                        <h1>{isRegistering ? 'Create your account' : 'Welcome back'}</h1>
+                        <p>
+                            {isRegistering
+                                ? 'Create a thoughtful space for the moments you want to remember.'
+                                : 'Continue your journal and pick up where you left off.'}
+                        </p>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                        <GoogleLogin
-                            onSuccess={async (credentialResponse) => {
-                                try {
-                                    setIsLoading(true);
-                                    if (!credentialResponse.credential) {
-                                        throw new Error('Google did not return a sign-in credential.');
+                    {googleOAuthEnabled ? (
+                        <div className="auth-google-wrap">
+                            <GoogleLogin
+                                onSuccess={async (credentialResponse) => {
+                                    try {
+                                        setError('');
+                                        setIsLoading(true);
+                                        if (!credentialResponse.credential) {
+                                            throw new Error('Google did not return a sign-in credential.');
+                                        }
+                                        const mode = isRegistering ? 'register' : 'login';
+                                        const data = await api.googleLogin(credentialResponse.credential, mode);
+                                        onLogin(data.access_token);
+                                    } catch (err) {
+                                        console.error('Google authentication failed:', err);
+                                        const detail = getApiErrorDetail(err, 'Google sign-in failed. Please try again.');
+                                        setError(
+                                            detail.includes('Account already exists')
+                                                ? 'That account already exists. Switch to Log in to continue.'
+                                                : detail,
+                                        );
+                                    } finally {
+                                        setIsLoading(false);
                                     }
-                                    const mode = isRegistering ? 'register' : 'login';
-                                    const data = await api.googleLogin(credentialResponse.credential, mode);
-                                    onLogin(data.access_token);
-                                } catch (err) {
-                                    console.error('Google Login Failed', err);
-                                    const detail = getApiErrorDetail(err, 'Google Login failed. Please try again.');
-                                    if (detail.includes('Account already exists')) {
-                                        setError("Account already exists. Please switch to Log In.");
-                                    } else {
-                                        setError(detail);
-                                    }
-                                } finally {
-                                    setIsLoading(false);
-                                }
-                            }}
-                            onError={() => {
-                                console.log('Login Failed');
-                                setError('Google Login failed.');
-                            }}
-                            theme="filled_black"
-                            shape="pill"
-                            width="320"
-                        />
-                    </div>
+                                }}
+                                onError={() => setError('Google sign-in failed. Please try again.')}
+                                theme="filled_black"
+                                shape="rectangular"
+                                text={isRegistering ? 'signup_with' : 'signin_with'}
+                                width="340"
+                            />
+                        </div>
+                    ) : (
+                        <p className="google-auth-notice" role="status">
+                            Google sign-in is unavailable in this local copy. Email sign-in is ready below.
+                        </p>
+                    )}
 
-                    <div className="auth-divider">OR LOG IN WITH EMAIL</div>
+                    <div className="auth-divider">
+                        {isRegistering ? 'Or register with email' : 'Or continue with email'}
+                    </div>
 
                     <form onSubmit={handleSubmit}>
                         {isRegistering && (
                             <>
                                 <div className="form-group">
-                                    <label className="form-label">Full Name</label>
+                                    <label className="form-label" htmlFor="auth-full-name">Full name</label>
                                     <input
+                                        id="auth-full-name"
                                         type="text"
                                         className="neo-input"
                                         placeholder="Jane Doe"
+                                        autoComplete="name"
                                         value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
+                                        onChange={(event) => setFullName(event.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Username</label>
+                                    <label className="form-label" htmlFor="auth-username">Username</label>
                                     <input
+                                        id="auth-username"
                                         type="text"
                                         className="neo-input"
-                                        placeholder="@janedoe"
+                                        placeholder="janedoe"
+                                        autoComplete="username"
                                         value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
+                                        onChange={(event) => setUsername(event.target.value)}
                                         required
                                     />
                                 </div>
@@ -131,67 +156,77 @@ export function Auth({ onLogin }: AuthProps) {
                         )}
 
                         <div className="form-group">
-                            <label className="form-label">Email Address</label>
+                            <label className="form-label" htmlFor="auth-email">Email address</label>
                             <input
+                                id="auth-email"
                                 type="email"
                                 className="neo-input"
                                 placeholder="name@example.com"
+                                autoComplete="email"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(event) => setEmail(event.target.value)}
                                 required
                             />
                         </div>
 
                         <div className="form-group">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
-                                {!isRegistering && <button type="button" style={{ background: 'none', border: 'none', padding: 0, fontSize: '0.85rem', color: 'var(--accent-primary)', cursor: 'pointer', textDecoration: 'underline' }}>Forgot Password?</button>}
-                            </div>
+                            <label className="form-label" htmlFor="auth-password">Password</label>
                             <input
+                                id="auth-password"
                                 type="password"
                                 className="neo-input"
                                 placeholder="Enter your password"
+                                autoComplete={isRegistering ? 'new-password' : 'current-password'}
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={(event) => setPassword(event.target.value)}
                                 required
                             />
                         </div>
 
                         {isRegistering && (
                             <div className="form-group">
-                                <label className="form-label">Confirm Password</label>
+                                <label className="form-label" htmlFor="auth-confirm-password">
+                                    Confirm password
+                                </label>
                                 <input
+                                    id="auth-confirm-password"
                                     type="password"
                                     className="neo-input"
                                     placeholder="Re-enter your password"
+                                    autoComplete="new-password"
                                     value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onChange={(event) => setConfirmPassword(event.target.value)}
                                     required
                                 />
                             </div>
                         )}
 
-                        <button type="submit" className="btn-primary" disabled={isLoading}>
-                            {isLoading ? 'Processing...' : (isRegistering ? 'Create Account' : 'Log In')}
-                        </button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            className="auth-submit"
+                            icon={isRegistering ? <UserPlus aria-hidden="true" /> : <LogIn aria-hidden="true" />}
+                            isLoading={isLoading}
+                        >
+                            {isRegistering ? 'Create account' : 'Log in'}
+                        </Button>
                     </form>
 
-                    {error && <div className="error-message">{error}</div>}
+                    {error && (
+                        <div className="form-message form-message-error" role="alert">
+                            <AlertCircle aria-hidden="true" />
+                            <span>{error}</span>
+                        </div>
+                    )}
 
-                    <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                        {isRegistering ? "Already have an account? " : "Don't have an account? "}
-                        <button
-                            onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-                            style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 'bold', padding: 0 }}
-                        >
-                            {isRegistering ? 'Log In' : 'Register'}
+                    <p className="auth-switch">
+                        {isRegistering ? 'Already have an account? ' : 'New to Kairo? '}
+                        <button type="button" onClick={toggleMode}>
+                            {isRegistering ? 'Log in' : 'Create an account'}
                         </button>
-                    </div>
-
-
-
+                    </p>
                 </div>
-            </div>
+            </main>
         </div>
     );
 }

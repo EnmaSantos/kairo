@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import axios from 'axios';
+import { Menu, RefreshCw } from 'lucide-react';
 import './App.css';
 import api from './api';
 import type { AppView, JournalEntry, Notebook, NotebookSelectionId, User } from './types';
-
-// Components
 import { Auth } from './components/Auth';
+import { Button } from './components/Button';
+import { LoadingState } from './components/LoadingState';
 import { Sidebar } from './components/Sidebar';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
@@ -18,7 +20,11 @@ const PhotosView = lazy(() => import('./components/PhotosView').then((module) =>
 
 type SelectedNotebook = Pick<Notebook, 'id' | 'title'> | { id: 'all'; title: string };
 
-export function App() {
+interface AppProps {
+  googleOAuthEnabled?: boolean;
+}
+
+export function App({ googleOAuthEnabled = false }: AppProps) {
   const [token, setToken] = useState<string | null>(() => window.localStorage.getItem('kairo_token'));
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
   const [selectedNotebook, setSelectedNotebook] = useState<SelectedNotebook | null>(null);
@@ -27,48 +33,75 @@ export function App() {
   const [allEntries, setAllEntries] = useState<JournalEntry[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [initialEntryText, setInitialEntryText] = useState('');
+  const [isInitialLoading, setIsInitialLoading] = useState(Boolean(token));
+  const [dataError, setDataError] = useState('');
 
   useEffect(() => {
-    if (token) {
-      void Promise.all([
-        fetchUserData(token),
-        fetchNotebooks(token),
-        fetchAllEntries(token),
-      ]);
-    } else {
-      setUser(null);
-      setNotebooks([]);
-      setAllEntries([]);
-      setCurrentView('dashboard');
-    }
+    let isCurrent = true;
+
+    const loadAppData = async (): Promise<void> => {
+      if (!token) {
+        setUser(null);
+        setNotebooks([]);
+        setAllEntries([]);
+        setCurrentView('dashboard');
+        setIsInitialLoading(false);
+        setDataError('');
+        return;
+      }
+
+      setIsInitialLoading(true);
+      setDataError('');
+
+      try {
+        const [userData, notebookData, entryData] = await Promise.all([
+          api.getUser(token),
+          api.getNotebooks(token),
+          api.getEntries(token),
+        ]);
+        if (!isCurrent) return;
+        setUser(userData);
+        setNotebooks(notebookData);
+        setAllEntries(entryData);
+      } catch (error) {
+        console.error('Failed to load journal data:', error);
+        if (isCurrent) {
+          if (axios.isAxiosError(error) && error.response?.status === 401) {
+            window.localStorage.removeItem('kairo_token');
+            setToken(null);
+          } else {
+            setDataError('Kairo could not load all of your journal data. Check that the server is running and try again.');
+          }
+        }
+      } finally {
+        if (isCurrent) setIsInitialLoading(false);
+      }
+    };
+
+    void loadAppData();
+    return () => {
+      isCurrent = false;
+    };
   }, [token]);
 
-  const fetchUserData = async (activeToken: string): Promise<void> => {
+  const refreshAppData = async (): Promise<void> => {
+    if (!token) return;
+    setIsInitialLoading(true);
+    setDataError('');
     try {
-      const userData = await api.getUser(activeToken);
+      const [userData, notebookData, entryData] = await Promise.all([
+        api.getUser(token),
+        api.getNotebooks(token),
+        api.getEntries(token),
+      ]);
       setUser(userData);
-    } catch (err) {
-      console.error('Failed to fetch user data:', err);
-      setToken(null);
-      window.localStorage.removeItem('kairo_token');
-    }
-  };
-
-  const fetchNotebooks = async (activeToken: string): Promise<void> => {
-    try {
-      const data = await api.getNotebooks(activeToken);
-      setNotebooks(data);
-    } catch (err) {
-      console.error('Failed to fetch notebooks:', err);
-    }
-  };
-
-  const fetchAllEntries = async (activeToken: string): Promise<void> => {
-    try {
-      const data = await api.getEntries(activeToken);
-      setAllEntries(data);
-    } catch (err) {
-      console.error('Failed to fetch entries:', err);
+      setNotebooks(notebookData);
+      setAllEntries(entryData);
+    } catch (error) {
+      console.error('Failed to refresh journal data:', error);
+      setDataError('Kairo could not refresh your journal data. Please try again.');
+    } finally {
+      setIsInitialLoading(false);
     }
   };
 
@@ -93,13 +126,21 @@ export function App() {
   const handleSelectNotebook = (notebookId: NotebookSelectionId): void => {
     const notebook = notebooks.find((candidate) => candidate.id === notebookId);
     setSelectedNotebook(
-      notebookId === 'all' ? { id: 'all', title: 'All Entries' } : notebook ?? null,
+      notebookId === 'all' ? { id: 'all', title: 'All entries' } : notebook ?? null,
     );
     setCurrentView('journal');
   };
 
+  const handleEntryCreated = (entry: JournalEntry): void => {
+    setAllEntries((current) => [entry, ...current.filter((candidate) => candidate.id !== entry.id)]);
+  };
+
+  const handleEntryDeleted = (entryId: number): void => {
+    setAllEntries((current) => current.filter((entry) => entry.id !== entryId));
+  };
+
   if (!token) {
-    return <Auth onLogin={handleLogin} />;
+    return <Auth onLogin={handleLogin} googleOAuthEnabled={googleOAuthEnabled} />;
   }
 
   return (
@@ -113,55 +154,80 @@ export function App() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <main className="main-content">
+      <main className="main-content" id="main-content">
         <button
+          type="button"
           className="hamburger-btn"
           aria-label="Open navigation"
+          aria-expanded={isSidebarOpen}
           onClick={() => setIsSidebarOpen(true)}
         >
-          ☰
+          <Menu aria-hidden="true" />
         </button>
-        <Suspense fallback={<p className="view-loading">Loading your journal…</p>}>
-          {currentView === 'dashboard' && (
-            <Dashboard
-              user={user}
-              entries={allEntries}
-              onPromptClick={(prompt) => {
-                setSelectedNotebook({ id: 'all', title: 'All Entries' });
-                setInitialEntryText(prompt);
-                setCurrentView('journal');
-              }}
-            />
+
+        <div className="content-frame">
+          {dataError && (
+            <div className="app-alert" role="alert">
+              <span>{dataError}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<RefreshCw aria-hidden="true" />}
+                onClick={() => void refreshAppData()}
+              >
+                Retry
+              </Button>
+            </div>
           )}
 
-          {currentView === 'library' && (
-            <Library
-              notebooks={notebooks}
-              setNotebooks={setNotebooks}
-              onSelectNotebook={handleSelectNotebook}
-              token={token}
-            />
-          )}
+          {isInitialLoading ? (
+            <LoadingState />
+          ) : (
+            <Suspense fallback={<LoadingState />}>
+              {currentView === 'dashboard' && (
+                <Dashboard
+                  user={user}
+                  entries={allEntries}
+                  onPromptClick={(prompt) => {
+                    setSelectedNotebook({ id: 'all', title: 'All entries' });
+                    setInitialEntryText(prompt);
+                    setCurrentView('journal');
+                  }}
+                />
+              )}
 
-          {currentView === 'journal' && (
-            <Journal
-              notebookId={selectedNotebook?.id ?? 'all'}
-              notebookTitle={selectedNotebook?.title}
-              token={token}
-              onBack={() => setCurrentView('library')}
-              initialText={initialEntryText}
-            />
-          )}
+              {currentView === 'library' && (
+                <Library
+                  notebooks={notebooks}
+                  setNotebooks={setNotebooks}
+                  onSelectNotebook={handleSelectNotebook}
+                  token={token}
+                />
+              )}
 
-          {currentView === 'settings' && user && (
-            <Settings user={user} onUpdateUser={setUser} />
-          )}
+              {currentView === 'journal' && (
+                <Journal
+                  notebookId={selectedNotebook?.id ?? 'all'}
+                  notebookTitle={selectedNotebook?.title}
+                  token={token}
+                  onBack={() => setCurrentView('library')}
+                  initialText={initialEntryText}
+                  onEntryCreated={handleEntryCreated}
+                  onEntryDeleted={handleEntryDeleted}
+                />
+              )}
 
-          {currentView === 'timeline' && <TimelineView entries={allEntries} />}
-          {currentView === 'calendar' && <CalendarView entries={allEntries} />}
-          {currentView === 'map' && <MapView entries={allEntries} />}
-          {currentView === 'photos' && <PhotosView entries={allEntries} />}
-        </Suspense>
+              {currentView === 'settings' && user && (
+                <Settings user={user} onUpdateUser={setUser} />
+              )}
+
+              {currentView === 'timeline' && <TimelineView entries={allEntries} showPageHeader />}
+              {currentView === 'calendar' && <CalendarView entries={allEntries} showPageHeader />}
+              {currentView === 'map' && <MapView entries={allEntries} showPageHeader />}
+              {currentView === 'photos' && <PhotosView entries={allEntries} showPageHeader />}
+            </Suspense>
+          )}
+        </div>
       </main>
     </div>
   );

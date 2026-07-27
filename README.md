@@ -208,17 +208,53 @@ DATABASE_URL=sqlite:///./kairo.db
 SECRET_KEY=dev-secret-key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
-GOOGLE_CLIENT_ID=placeholder-client-id
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
 Frontend `kairo-frontend/.env` (see `.env.example`):
 
 ```env
 VITE_API_URL=http://127.0.0.1:8000
-VITE_GOOGLE_CLIENT_ID=placeholder-client-id
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
+### Google sign-in (optional)
+
+The `401: invalid_client` page means the configured client ID is a placeholder,
+was deleted, or does not belong to a current Google OAuth client. Create or
+recover a **Web application** client in [Google Auth Platform](https://console.cloud.google.com/auth/clients), then add both local origins:
+
+```text
+http://localhost:3000
+http://127.0.0.1:3000
+```
+
+Use the same client ID (the value ending in `.apps.googleusercontent.com`) in
+both files:
+
+```env
+# .env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+
+# kairo-frontend/.env
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+Restart Kairo after changing either file. The browser client ID is public, so
+it is safe to put this one value in both tracked `.env.example` files and
+commit them. The `kairo` launcher copies those templates into `.env` files for
+new clones automatically, letting local clones share the same Google sign-in.
+Never add a Google client secret to the repository.
+
+For a deployed site, add its exact `https://` origin to the same Google client.
+Forks deployed to a different domain need their own client ID (or an origin you
+explicitly add); Google does not allow a wildcard origin for arbitrary forks.
+Set that same deployed UI origin in `CORS_ALLOWED_ORIGINS` in the backend `.env`
+so Kairo's API accepts its browser requests.
+
 ### 3. Seed demo data
+
+To create the original disposable demo account and reset its sample database:
 
 ```bash
 source kairo-env/bin/activate
@@ -232,6 +268,18 @@ Demo login:
 | --- | --- |
 | Email | `jack.tucker@example.com` |
 | Password | `password123` |
+
+To safely add or refresh showcase content for an existing account without
+changing its password or deleting any of its data:
+
+```bash
+./kairo-env/bin/python seed_showcase_data.py \
+  --email enmanueldelossantos64@gmail.com
+```
+
+The showcase seed is limited to the local SQLite database, is disabled when
+`KAIRO_ENV=production`, reuses matching notebooks, and skips or refreshes its
+own deterministic entries when run again.
 
 ### 4. Frontend dependencies
 
@@ -272,6 +320,7 @@ npm run dev
 | `auth.py` | JWT helpers |
 | `utils.py` | Password hashing |
 | `seed_data.py` | Demo user + sample entries |
+| `seed_showcase_data.py` | Idempotent, account-scoped showcase content |
 | `kairo-frontend/` | React UI |
 | `docs/images/` | README screenshots |
 

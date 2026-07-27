@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, FileAudio, Mic, Square, Trash2 } from 'lucide-react';
 import './VoiceRecorder.css';
 import api from '../api';
 import type { JournalEntry, NotebookId } from '../types';
-import { NeoButton } from './NeoButton';
+import { Button } from './Button';
 
 interface VoiceRecorderProps {
   onTranscriptionComplete: (text: string) => void;
@@ -26,6 +27,7 @@ export function VoiceRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [realTimeText, setRealTimeText] = useState('');
+  const [error, setError] = useState('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const websocketRef = useRef<WebSocket | null>(null);
@@ -38,6 +40,7 @@ export function VoiceRecorder({
   }, []);
 
   const startRecording = async (): Promise<void> => {
+    setError('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -45,67 +48,57 @@ export function VoiceRecorder({
       audioChunksRef.current = [];
       setRealTimeText('');
 
-      // --- WebSocket Setup ---
-      const ws = new WebSocket(TRANSCRIPTION_SOCKET_URL);
-      websocketRef.current = ws;
+      const websocket = new WebSocket(TRANSCRIPTION_SOCKET_URL);
+      websocketRef.current = websocket;
 
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-      };
-
-      ws.onmessage = (event: MessageEvent<string>) => {
+      websocket.onmessage = (event: MessageEvent<string>) => {
         const data = JSON.parse(event.data) as { text?: unknown };
-        if (typeof data.text === 'string') {
-          setRealTimeText(data.text);
-        }
+        if (typeof data.text === 'string') setRealTimeText(data.text);
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      websocket.onerror = (socketError) => {
+        console.error('Transcription connection error:', socketError);
+        setError('Live transcription is reconnecting. Your audio is still being recorded.');
       };
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+        if (event.data.size === 0) return;
+        audioChunksRef.current.push(event.data);
 
-          // Send the FULL accumulated audio so far (ensures valid headers)
-          if (ws.readyState === WebSocket.OPEN) {
-            const fullBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            ws.send(fullBlob);
-          }
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(new Blob(audioChunksRef.current, { type: 'audio/webm' }));
         }
       };
 
-      // Start recording with 2-second chunks for streaming
       mediaRecorder.start(2000);
       setIsRecording(true);
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Could not access microphone. Please allow microphone access.');
+    } catch (recordingError) {
+      console.error('Error starting recording:', recordingError);
+      setError('Kairo could not access your microphone. Allow microphone access and try again.');
     }
   };
 
-  const stopRecording = (action: RecordingAction = 'transcribe'): void => {
+  const stopRecording = (action: RecordingAction): void => {
     const mediaRecorder = mediaRecorderRef.current;
-    if (mediaRecorder && isRecording) {
-      websocketRef.current?.close();
-      websocketRef.current = null;
+    if (!mediaRecorder || !isRecording) return;
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    websocketRef.current?.close();
+    websocketRef.current = null;
 
-        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      mediaRecorder.stream.getTracks().forEach((track) => track.stop());
 
-        if (action === 'transcribe') {
-          onTranscriptionComplete(realTimeText);
-        } else if (action === 'save') {
-          await handleSave(audioBlob);
-        }
-      };
+      if (action === 'transcribe') {
+        if (realTimeText.trim()) onTranscriptionComplete(realTimeText.trim());
+        else setError('No transcription was captured. You can try again or save the audio directly.');
+      } else {
+        await handleSave(audioBlob);
+      }
+    };
 
-      mediaRecorder.stop();
-      setIsRecording(false);
-    }
+    mediaRecorder.stop();
+    setIsRecording(false);
   };
 
   const cancelRecording = (): void => {
@@ -114,23 +107,25 @@ export function VoiceRecorder({
 
     const mediaRecorder = mediaRecorderRef.current;
     if (mediaRecorder) {
-      if (mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-      }
+      mediaRecorder.onstop = null;
+      if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
       mediaRecorder.stream.getTracks().forEach((track) => track.stop());
     }
+
+    audioChunksRef.current = [];
+    setRealTimeText('');
     setIsRecording(false);
   };
 
   const handleSave = async (audioBlob: Blob): Promise<void> => {
     setIsProcessing(true);
+    setError('');
     try {
       const newEntry = await api.createVoiceEntry(token, audioBlob, notebookId);
-      console.log('Voice entry created:', newEntry);
       onSave?.(newEntry);
-    } catch (error) {
-      console.error('Save error:', error);
-      alert('Failed to save voice entry.');
+    } catch (saveError) {
+      console.error('Voice entry save error:', saveError);
+      setError('The recording could not be saved. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -138,48 +133,61 @@ export function VoiceRecorder({
 
   return (
     <div className="voice-recorder">
-      {!isRecording && !isProcessing && (
-        <NeoButton
-          text="🎤 Start Live Recording"
-          color="#FF6B9D"
-          onClick={startRecording}
-        />
+      {!isRecording && (
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Mic aria-hidden="true" />}
+          isLoading={isProcessing}
+          onClick={() => void startRecording()}
+        >
+          {isProcessing ? 'Saving recording' : 'Record a thought'}
+        </Button>
       )}
 
       {isRecording && (
-        <div className="recording-indicator">
-          <div className="pulse-dot"></div>
-          <span>Recording...</span>
+        <div className="recording-panel" role="status" aria-live="polite">
+          <div className="recording-status">
+            <span className="pulse-dot" aria-hidden="true" />
+            <span>Recording in progress</span>
+          </div>
 
-          {/* Real-time Text Display */}
-          <div className="typewriter-container">
-            <span className="typewriter-text">{realTimeText || "Listening..."}</span>
+          <div className="transcription-preview">
+            {realTimeText || 'Listening… your words will appear here.'}
           </div>
 
           <div className="recording-controls">
-            <NeoButton
-              text="✅ Use Text"
-              color="#00FF95"
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Square aria-hidden="true" />}
               onClick={() => stopRecording('transcribe')}
-            />
-            <NeoButton
-              text="💾 Save Audio"
-              color="#FFD600"
+            >
+              Use transcription
+            </Button>
+            <Button
+              size="sm"
+              icon={<FileAudio aria-hidden="true" />}
               onClick={() => stopRecording('save')}
-            />
-            <NeoButton
-              text="❌ Cancel"
-              color="#FF4747"
+            >
+              Save audio
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Trash2 aria-hidden="true" />}
               onClick={cancelRecording}
-            />
+            >
+              Cancel
+            </Button>
           </div>
         </div>
       )}
 
-      {isProcessing && (
-        <div className="transcribing-indicator">
-          <div className="spinner"></div>
-          <span>Saving audio...</span>
+      {error && (
+        <div className="voice-error" role="alert">
+          <AlertCircle aria-hidden="true" />
+          <span>{error}</span>
         </div>
       )}
     </div>
