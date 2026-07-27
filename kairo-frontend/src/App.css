@@ -1020,7 +1020,33 @@ button.stat-card:hover {
 }
 
 .recent-entry-card {
+  position: relative;
   min-height: 190px;
+}
+
+.clickable-card {
+  position: relative;
+  cursor: pointer;
+}
+
+.clickable-card:hover {
+  border-color: var(--accent-border);
+}
+
+.card-click-target {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.card-click-target:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -3px;
 }
 
 .entry-header {
@@ -1155,6 +1181,10 @@ button.stat-card:hover {
   object-fit: cover;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+}
+
+.entry-card-footer {
+  margin-top: 1rem;
 }
 
 /* Library */
@@ -1513,6 +1543,73 @@ button.stat-card:hover {
   overflow: hidden;
 }
 
+.entry-detail-backdrop {
+  z-index: 1200;
+}
+
+.entry-detail-modal {
+  display: flex;
+  width: min(100%, 760px);
+  max-height: min(820px, calc(100dvh - 2.5rem));
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.entry-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.4rem 1.5rem 1.2rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.entry-detail-header .page-eyebrow {
+  margin-bottom: 0.45rem;
+}
+
+.entry-detail-header h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.entry-detail-scroll {
+  padding: 1.4rem 1.5rem 1.6rem;
+  overflow-y: auto;
+}
+
+.entry-detail-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-bottom: 1.15rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.entry-detail-body {
+  color: #c7d0d9;
+  font-family: var(--font-serif);
+  font-size: 1.04rem;
+  line-height: 1.78;
+  white-space: pre-wrap;
+}
+
+.entry-detail-image {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  margin-top: 1.4rem;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
 .modal-header {
   display: flex;
   align-items: flex-start;
@@ -1596,6 +1693,7 @@ button.stat-card:hover {
 }
 
 .timeline-card {
+  position: relative;
   padding: 1.2rem;
 }
 
@@ -1636,6 +1734,7 @@ button.stat-card:hover {
 }
 
 .calendar-entry {
+  position: relative;
   padding: 0.9rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -1682,6 +1781,10 @@ button.stat-card:hover {
   overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.photo-card .card-click-target {
   border-radius: var(--radius-lg);
 }
 
@@ -2156,5 +2259,11 @@ button.stat-card:hover {
   .map-frame {
     min-height: 430px;
     height: 62dvh;
+  }
+
+  .entry-detail-header,
+  .entry-detail-scroll {
+    padding-right: 1rem;
+    padding-left: 1rem;
   }
 }

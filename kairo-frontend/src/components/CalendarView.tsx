@@ -6,6 +6,7 @@ import './CalendarView.css';
 import type { JournalEntry } from '../types';
 import { formatSentiment, getEntryPresentation } from '../utils/entries';
 import { EmptyState } from './EmptyState';
+import { EntryDetailModal } from './EntryDetailModal';
 import { PageHeader } from './PageHeader';
 
 interface CalendarViewProps {
@@ -21,6 +22,7 @@ function isSameDay(left: Date, right: Date): boolean {
 
 export function CalendarView({ entries, showPageHeader = false }: CalendarViewProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
     const hasEntries = (date: Date): boolean => (
         entries.some((entry) => isSameDay(new Date(entry.created_at), date))
@@ -70,7 +72,13 @@ export function CalendarView({ entries, showPageHeader = false }: CalendarViewPr
                         {selectedEntries.map((entry) => {
                             const presentation = getEntryPresentation(entry);
                             return (
-                                <article key={entry.id} className="calendar-entry">
+                                <article key={entry.id} className="calendar-entry clickable-card">
+                                    <button
+                                        type="button"
+                                        className="card-click-target"
+                                        aria-label={`Open ${presentation.title}`}
+                                        onClick={() => setSelectedEntry(entry)}
+                                    />
                                     <h3>{presentation.title}</h3>
                                     {presentation.body && <p>{presentation.body}</p>}
                                     <div className="calendar-entry-meta">
@@ -95,7 +103,18 @@ export function CalendarView({ entries, showPageHeader = false }: CalendarViewPr
         </div>
     );
 
-    if (!showPageHeader) return content;
+    const detailModal = (
+        <EntryDetailModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+    );
+
+    if (!showPageHeader) {
+        return (
+            <>
+                {content}
+                {detailModal}
+            </>
+        );
+    }
 
     return (
         <div className="standalone-view">
@@ -105,6 +124,7 @@ export function CalendarView({ entries, showPageHeader = false }: CalendarViewPr
                 description="Browse your journal by day and revisit the moments that shaped each week."
             />
             {content}
+            {detailModal}
         </div>
     );
 }

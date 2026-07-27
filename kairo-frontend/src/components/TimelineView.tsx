@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Clock3 } from 'lucide-react';
 import type { JournalEntry } from '../types';
 import { formatEntryDay, formatSentiment, getEntryPresentation } from '../utils/entries';
 import { EmptyState } from './EmptyState';
+import { EntryDetailModal } from './EntryDetailModal';
 import { PageHeader } from './PageHeader';
 
 interface TimelineViewProps {
@@ -10,6 +12,8 @@ interface TimelineViewProps {
 }
 
 export function TimelineView({ entries, showPageHeader = false }: TimelineViewProps) {
+    const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+
     const content = entries.length === 0 ? (
         <EmptyState
             title="Your timeline is waiting"
@@ -23,7 +27,13 @@ export function TimelineView({ entries, showPageHeader = false }: TimelineViewPr
                 return (
                     <article key={entry.id} className="timeline-item">
                         <span className="timeline-dot" aria-hidden="true" />
-                        <div className="timeline-card surface-card">
+                        <div className="timeline-card surface-card clickable-card">
+                            <button
+                                type="button"
+                                className="card-click-target"
+                                aria-label={`Open ${presentation.title}`}
+                                onClick={() => setSelectedEntry(entry)}
+                            />
                             <div className="timeline-date">
                                 <time dateTime={entry.created_at}>{formatEntryDay(entry.created_at)}</time>
                                 <span>
@@ -39,7 +49,7 @@ export function TimelineView({ entries, showPageHeader = false }: TimelineViewPr
                                 <img src={entry.image_url} alt="Entry attachment" className="entry-image" />
                             )}
                             {entry.sentiment && (
-                                <div className="entry-meta">
+                                <div className="entry-meta entry-card-footer">
                                     <span className={`sentiment-badge ${entry.sentiment.toLowerCase()}`}>
                                         {formatSentiment(entry.sentiment)}
                                     </span>
@@ -52,7 +62,18 @@ export function TimelineView({ entries, showPageHeader = false }: TimelineViewPr
         </div>
     );
 
-    if (!showPageHeader) return content;
+    const detailModal = (
+        <EntryDetailModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+    );
+
+    if (!showPageHeader) {
+        return (
+            <>
+                {content}
+                {detailModal}
+            </>
+        );
+    }
 
     return (
         <div className="standalone-view">
@@ -62,6 +83,7 @@ export function TimelineView({ entries, showPageHeader = false }: TimelineViewPr
                 description="See how your thoughts, projects, and routines have evolved over time."
             />
             {content}
+            {detailModal}
         </div>
     );
 }

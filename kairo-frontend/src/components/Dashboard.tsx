@@ -16,6 +16,7 @@ import type { DashboardView, JournalEntry, User } from '../types';
 import { formatEntryDate, formatSentiment, getEntryPresentation } from '../utils/entries';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
+import { EntryDetailModal } from './EntryDetailModal';
 
 const CalendarView = lazy(() => import('./CalendarView').then((module) => ({ default: module.CalendarView })));
 const MapView = lazy(() => import('./MapView').then((module) => ({ default: module.MapView })));
@@ -47,6 +48,7 @@ const viewOptions: { id: DashboardView; label: string; icon: LucideIcon }[] = [
 
 export function Dashboard({ user, entries, onPromptClick }: DashboardProps) {
     const [currentView, setCurrentView] = useState<DashboardView>('list');
+    const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
     const greeting = useMemo(() => {
         const hour = new Date().getHours();
@@ -224,7 +226,13 @@ export function Dashboard({ user, entries, onPromptClick }: DashboardProps) {
                         {entries.slice(0, 6).map((entry) => {
                             const presentation = getEntryPresentation(entry);
                             return (
-                                <article key={entry.id} className="entry-card recent-entry-card">
+                                <article key={entry.id} className="entry-card recent-entry-card clickable-card">
+                                    <button
+                                        type="button"
+                                        className="card-click-target"
+                                        aria-label={`Open ${presentation.title}`}
+                                        onClick={() => setSelectedEntry(entry)}
+                                    />
                                     <div className="entry-header">
                                         <div className="entry-meta">
                                             <time dateTime={entry.created_at}>{formatEntryDate(entry.created_at)}</time>
@@ -248,6 +256,7 @@ export function Dashboard({ user, entries, onPromptClick }: DashboardProps) {
             {currentView === 'map' && <MapView entries={entries} />}
             {currentView === 'photos' && <PhotosView entries={entries} />}
             {currentView === 'timeline' && <TimelineView entries={entries} />}
+            <EntryDetailModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
         </div>
     );
 }
