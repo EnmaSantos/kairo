@@ -1,12 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
-transformers
-librosa
-torch
-numpy
-sentence-transformers
-faiss-cpu
 python-dotenv
 google-auth
 requests

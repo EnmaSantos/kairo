@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import JSON, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.sql.expression import text
 from sqlalchemy.orm import relationship
@@ -36,7 +36,17 @@ class JournalEntry(Base):
     image_url = Column(String, nullable=True) # New column for image uploads
     latitude = Column(String, nullable=True) # Store as string for simplicity, or Float
     longitude = Column(String, nullable=True)
-    sentiment = Column(String, nullable=True) # For our stretch goal
+    # `sentiment` remains the broad mood used by existing filters. The richer
+    # local model result is stored separately so older clients keep working.
+    sentiment = Column(String, nullable=True)
+    emotion_label = Column(String, nullable=True)
+    emotion_scores = Column(JSON, nullable=True)
+    voice_emotion = Column(String, nullable=True)
+    voice_emotion_scores = Column(JSON, nullable=True)
+    summary = Column(String, nullable=True)
+    ai_model_versions = Column(JSON, nullable=True)
+    ai_processed_at = Column(DateTime(timezone=True), nullable=True)
+    source_type = Column(String, nullable=False, default="text", server_default="text")
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     

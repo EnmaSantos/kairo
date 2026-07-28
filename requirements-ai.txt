@@ -1,0 +1,15 @@
+-r requirements.txt
+
+# Apple-silicon local AI runtime. Model weights remain outside the repository.
+torch
+torchaudio
+transformers
+accelerate
+sentence-transformers
+huggingface_hub[hf_xet]
+librosa
+soundfile
+numpy<=2.4.6
+mlx
+mlx-lm
+mlx-vlm
