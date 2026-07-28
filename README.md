@@ -2,7 +2,7 @@
 
 A private, voice-first journal with a hosted history viewer and local-only AI.
 
-[Watch Demo](#demo) · [How the AI works](#how-the-ai-works) · [Run locally](#run-locally) · [Release notes](RELEASE_NOTES.md)
+[Watch Demo](https://youtu.be/EwsEd3qqytU) · [How the AI works](#how-the-ai-works) · [Run locally](#run-locally) · [Release notes](RELEASE_NOTES.md)
 
 <p align="center">
   <img src="docs/images/auth-page.png" alt="Kairo sign-in screen" width="900" />
@@ -18,21 +18,9 @@ A private, voice-first journal with a hosted history viewer and local-only AI.
 
 ## Demo
 
-> **Video coming next.** A clean 60–90 second screen recording is the best proof that voice + AI actually work. Until then, use the gallery below and run the app locally.
+[![Watch the Kairo video demo](https://img.youtube.com/vi/EwsEd3qqytU/maxresdefault.jpg)](https://youtu.be/EwsEd3qqytU)
 
-<!-- When ready, replace this block:
-[![Watch the 90-second demo](docs/images/demo-thumbnail.png)](https://youtu.be/YOUR_VIDEO_ID)
-or Loom: https://www.loom.com/share/YOUR_ID
--->
-
-**Suggested demo script (60–90s):**
-
-1. One-line intro: *“Kairo is a voice-first AI journal.”*
-2. Record a short spoken entry.
-3. Show transcription + emotion label.
-4. Ask a chat question about past entries.
-5. Show retrieved context from earlier journals.
-6. Close on dashboard or auto-generated notebooks.
+[Watch the Kairo video demo on YouTube](https://youtu.be/EwsEd3qqytU)
 
 **For your resume while not deployed:** `Kairo — GitHub | Video Demo` (not “Live Demo”).
 
